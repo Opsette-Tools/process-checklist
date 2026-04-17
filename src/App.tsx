@@ -176,7 +176,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   ) : null;
 
   return (
-    <Layout style={{ minHeight: '100vh', background: isDark ? '#000' : '#faf6f1' }}>
+    <Layout style={{ minHeight: '100vh', background: isDark ? '#000' : '#f5f5f5' }}>
       {messageContext}
       <Header isDark={isDark} onToggleDark={setIsDark} leftSlot={headerLeft} />
       <Layout style={{ background: 'transparent' }}>
@@ -187,9 +187,9 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             style={{
               background: isDark ? '#141414' : '#ffffff',
               borderRight: `1px solid ${isDark ? '#303030' : '#f0f0f0'}`,
-              height: 'calc(100vh - 56px)',
+              height: 'calc(100vh - 60px)',
               position: 'sticky',
-              top: 56,
+              top: 60,
               overflow: 'hidden',
             }}
           >
@@ -208,7 +208,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             {sidebar}
           </Drawer>
         )}
-        <Content style={{ background: isDark ? '#000' : '#faf6f1' }}>
+        <Content style={{ background: isDark ? '#000' : '#f5f5f5' }}>
           {selected ? (
             <ChecklistEditor
               ref={editorRef}

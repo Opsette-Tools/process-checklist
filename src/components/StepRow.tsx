@@ -75,7 +75,8 @@ export default function StepRow({
         ...style,
         padding: '8px 8px',
         borderRadius: 8,
-        background: isDark ? '#1f1f1f' : '#fafafa',
+        background: isDark ? '#262626' : '#fafafa',
+        border: `1px solid ${isDark ? '#303030' : '#EEEEEE'}`,
         marginBottom: 6,
       }}
     >

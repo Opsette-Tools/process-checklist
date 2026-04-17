@@ -270,48 +270,63 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
     patch({ categories: next, steps });
   };
 
+  const cardStyle: React.CSSProperties = {
+    background: isDark ? '#1f1f1f' : '#ffffff',
+    border: `1px solid ${isDark ? '#303030' : '#E5E7EB'}`,
+    borderRadius: 12,
+    boxShadow: isDark
+      ? '0 1px 2px rgba(0,0,0,0.4)'
+      : '0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)',
+  };
+
   return (
-    <div style={{ padding: 16, maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ padding: 20, maxWidth: 900, margin: '0 auto' }}>
       {messageContext}
 
-      <Space align="center" style={{ marginBottom: 4 }} wrap>
-        {checklist.isTemplate && (
-          <Tag icon={<StarFilled />} color="gold">TEMPLATE</Tag>
+      {/* Identity card: tags + name + description + progress */}
+      <div style={{ ...cardStyle, padding: 20, marginBottom: 16 }}>
+        {(checklist.isTemplate || (checklist.completedAt && !checklist.isTemplate)) && (
+          <Space align="center" style={{ marginBottom: 8 }} wrap>
+            {checklist.isTemplate && (
+              <Tag icon={<StarFilled />} color="gold">TEMPLATE</Tag>
+            )}
+            {checklist.completedAt && !checklist.isTemplate && (
+              <Tag icon={<CheckCircleFilled />} color="success">COMPLETED</Tag>
+            )}
+          </Space>
         )}
-        {checklist.completedAt && !checklist.isTemplate && (
-          <Tag icon={<CheckCircleFilled />} color="success">COMPLETED</Tag>
-        )}
-      </Space>
 
-      <Input
-        variant="borderless"
-        value={nameDraft}
-        onChange={(e) => setNameDraft(e.target.value)}
-        onBlur={() => patch({ name: nameDraft.trim() || 'Untitled Checklist' })}
-        onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
-        style={{ fontSize: 24, fontWeight: 600, padding: '4px 0' }}
-        placeholder="Checklist name"
-      />
+        <Input
+          variant="borderless"
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={() => patch({ name: nameDraft.trim() || 'Untitled Checklist' })}
+          onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
+          style={{ fontSize: 24, fontWeight: 600, padding: 0, marginBottom: 4 }}
+          placeholder="Checklist name"
+        />
 
-      <TextArea
-        variant="borderless"
-        value={descDraft}
-        onChange={(e) => setDescDraft(e.target.value)}
-        onBlur={() => patch({ description: descDraft.trim() })}
-        placeholder="Add a description (optional)"
-        autoSize={{ minRows: 1, maxRows: 4 }}
-        style={{ padding: '4px 0', marginBottom: 12, color: isDark ? '#aaa' : '#666' }}
-      />
+        <TextArea
+          variant="borderless"
+          value={descDraft}
+          onChange={(e) => setDescDraft(e.target.value)}
+          onBlur={() => patch({ description: descDraft.trim() })}
+          placeholder="Add a description (optional)"
+          autoSize={{ minRows: 1, maxRows: 4 }}
+          style={{ padding: 0, marginBottom: 14, color: isDark ? '#aaa' : '#666' }}
+        />
 
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {total === 0 ? 'No steps yet' : `${done}/${total} steps · ${pct}%`}
-          </Text>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {total === 0 ? 'No steps yet' : `${done}/${total} steps · ${pct}%`}
+            </Text>
+          </div>
+          <Progress percent={pct} showInfo={false} strokeColor="#A97142" size="small" />
         </div>
-        <Progress percent={pct} showInfo={false} strokeColor="#A97142" size="small" />
       </div>
 
+      {/* Action bar */}
       <Space wrap className="no-print" style={{ marginBottom: 16 }}>
         {checklist.isTemplate ? (
           <Tooltip title="Use this template">
@@ -344,51 +359,58 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
       </Space>
 
       {allDone && !checklist.isTemplate && (
-        <Result
-          status="success"
-          title="All done!"
-          subTitle="Every step is checked off. Great work."
-          style={{ padding: '16px 0' }}
-        />
-      )}
-
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={sortedSteps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-          {sortedSteps.map((step) => (
-            <StepRow
-              key={step.id}
-              step={step}
-              categories={checklist.categories}
-              isTemplate={checklist.isTemplate}
-              isDark={isDark}
-              onChange={(p) => updateStep(step.id, p)}
-              onDelete={() => deleteStep(step.id)}
-              onDuplicate={() => duplicateStepById(step.id)}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
-
-      {sortedSteps.length === 0 && (
-        <div
-          style={{
-            padding: 24,
-            border: `1px dashed ${isDark ? '#303030' : '#d9d9d9'}`,
-            borderRadius: 8,
-            textAlign: 'center',
-            marginBottom: 8,
-          }}
-        >
-          <Text type="secondary">No steps yet. Add your first step below.</Text>
+        <div style={{ ...cardStyle, padding: '8px 20px', marginBottom: 16 }}>
+          <Result
+            status="success"
+            title="All done!"
+            subTitle="Every step is checked off. Great work."
+            style={{ padding: 0 }}
+          />
         </div>
       )}
 
-      <AddStepForm
-        ref={addStepRef}
-        categories={checklist.categories}
-        isTemplate={checklist.isTemplate}
-        onAdd={addStep}
-      />
+      {/* Steps card */}
+      <div style={{ ...cardStyle, padding: 16 }}>
+        {sortedSteps.length > 0 ? (
+          <div style={{ marginBottom: 12 }}>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={sortedSteps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                {sortedSteps.map((step) => (
+                  <StepRow
+                    key={step.id}
+                    step={step}
+                    categories={checklist.categories}
+                    isTemplate={checklist.isTemplate}
+                    isDark={isDark}
+                    onChange={(p) => updateStep(step.id, p)}
+                    onDelete={() => deleteStep(step.id)}
+                    onDuplicate={() => duplicateStepById(step.id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: 20,
+              border: `1px dashed ${isDark ? '#303030' : '#d9d9d9'}`,
+              borderRadius: 8,
+              textAlign: 'center',
+              marginBottom: 12,
+            }}
+          >
+            <Text type="secondary">No steps yet. Add your first step below.</Text>
+          </div>
+        )}
+
+        <AddStepForm
+          ref={addStepRef}
+          categories={checklist.categories}
+          isTemplate={checklist.isTemplate}
+          onAdd={addStep}
+        />
+      </div>
 
       <CategoryManager
         open={categoryManagerOpen}

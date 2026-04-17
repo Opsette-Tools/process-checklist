@@ -1,5 +1,5 @@
 import { Layout, Typography, Switch, Space } from 'antd';
-import { SunOutlined, MoonOutlined } from '@ant-design/icons';
+import { SunOutlined, MoonOutlined, ScheduleOutlined } from '@ant-design/icons';
 
 const { Header: AntHeader } = Layout;
 const { Title } = Typography;
@@ -8,22 +8,6 @@ interface HeaderProps {
   isDark: boolean;
   onToggleDark: (v: boolean) => void;
   leftSlot?: React.ReactNode;
-}
-
-function Logo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect width="64" height="64" rx="12" fill="#A97142" />
-      <path
-        d="M18 33 L28 43 L46 22"
-        stroke="white"
-        strokeWidth="6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
-  );
 }
 
 export default function Header({ isDark, onToggleDark, leftSlot }: HeaderProps) {
@@ -37,21 +21,21 @@ export default function Header({ isDark, onToggleDark, leftSlot }: HeaderProps) 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 16px',
-        height: 56,
-        background: isDark ? '#1E293B' : '#ffffff',
-        borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+        padding: '0 20px',
+        height: 60,
+        background: isDark ? '#141414' : '#ffffff',
+        borderBottom: `1px solid ${isDark ? '#303030' : '#EAEAEA'}`,
       }}
     >
       <div style={{ width: 80, display: 'flex', alignItems: 'center' }}>{leftSlot}</div>
 
       <Space align="center" size={10}>
-        <Logo />
+        <ScheduleOutlined style={{ fontSize: 22, color: '#A97142' }} />
         <Title
           level={3}
           style={{
             margin: 0,
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: 700,
             letterSpacing: '-0.02em',
             lineHeight: 1,
