@@ -247,9 +247,11 @@ export default function ChecklistEditor({
             Save as Template
           </Button>
         )}
-        <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
-          Copy Summary
-        </Button>
+        <Tooltip title="Copies the full checklist (name, steps, descriptions, URLs) as plain text to your clipboard">
+          <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
+            Copy as Text
+          </Button>
+        </Tooltip>
         <Popconfirm title="Delete this checklist?" onConfirm={onDelete} okText="Delete" okButtonProps={{ danger: true }}>
           <Button danger icon={<DeleteOutlined />}>
             Delete
