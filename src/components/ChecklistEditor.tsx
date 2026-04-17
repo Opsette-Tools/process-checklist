@@ -118,8 +118,8 @@ export default function ChecklistEditor({
     });
   };
 
-  const addStep = (label: string, url?: string, category?: StepCategory) => {
-    const next = createStep({ label, url, category, sortOrder: checklist.steps.length });
+  const addStep = (label: string, description?: string, url?: string, category?: StepCategory) => {
+    const next = createStep({ label, description, url, category, sortOrder: checklist.steps.length });
     patch({ steps: [...checklist.steps, next] });
   };
 
