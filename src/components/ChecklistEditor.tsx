@@ -32,7 +32,7 @@ import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-ki
 import confetti from 'canvas-confetti';
 import type { Checklist, ChecklistStep, StepCategory } from '@/types';
 import { createStep, duplicateAsActive, duplicateAsTemplate } from '@/lib/storage';
-import { buildSummary } from '@/lib/summary';
+import { copyChecklistToClipboard } from '@/lib/summary';
 import StepRow from './StepRow';
 import AddStepForm from './AddStepForm';
 
@@ -188,8 +188,8 @@ export default function ChecklistEditor({
 
   const handleCopySummary = async () => {
     try {
-      await navigator.clipboard.writeText(buildSummary(checklist));
-      message.success('Checklist copied to clipboard as text');
+      await copyChecklistToClipboard(checklist);
+      message.success('Checklist copied — paste into Docs, Notion, email, etc.');
     } catch {
       message.error('Could not copy to clipboard');
     }
@@ -248,9 +248,9 @@ export default function ChecklistEditor({
             Save as Template
           </Button>
         )}
-        <Tooltip title="Copies the full checklist (name, steps, descriptions, URLs) as plain text to your clipboard">
+        <Tooltip title="Copies as rich text (heading + bullets with sub-bullets for URLs). Pastes formatted into Docs, Notion, email; falls back to plain text elsewhere.">
           <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
-            Copy as Text
+            Copy
           </Button>
         </Tooltip>
         <Popconfirm title="Delete this checklist?" onConfirm={onDelete} okText="Delete" okButtonProps={{ danger: true }}>
