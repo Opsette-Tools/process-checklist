@@ -3,6 +3,7 @@ export type StepCategory = 'doc' | 'invoice' | 'workspace' | 'task' | 'custom';
 export interface ChecklistStep {
   id: string;
   label: string;
+  description?: string;
   url?: string;
   category?: StepCategory;
   completed: boolean;

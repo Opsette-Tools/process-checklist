@@ -10,6 +10,7 @@ import {
   message,
   Modal,
   Result,
+  Tooltip,
 } from 'antd';
 import {
   CopyOutlined,
@@ -118,8 +119,8 @@ export default function ChecklistEditor({
     });
   };
 
-  const addStep = (label: string, url?: string, category?: StepCategory) => {
-    const next = createStep({ label, url, category, sortOrder: checklist.steps.length });
+  const addStep = (label: string, description?: string, url?: string, category?: StepCategory) => {
+    const next = createStep({ label, description, url, category, sortOrder: checklist.steps.length });
     patch({ steps: [...checklist.steps, next] });
   };
 
@@ -188,7 +189,7 @@ export default function ChecklistEditor({
   const handleCopySummary = async () => {
     try {
       await navigator.clipboard.writeText(buildSummary(checklist));
-      message.success('Summary copied to clipboard');
+      message.success('Checklist copied to clipboard as text');
     } catch {
       message.error('Could not copy to clipboard');
     }
@@ -247,9 +248,11 @@ export default function ChecklistEditor({
             Save as Template
           </Button>
         )}
-        <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
-          Copy Summary
-        </Button>
+        <Tooltip title="Copies the full checklist (name, steps, descriptions, URLs) as plain text to your clipboard">
+          <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
+            Copy as Text
+          </Button>
+        </Tooltip>
         <Popconfirm title="Delete this checklist?" onConfirm={onDelete} okText="Delete" okButtonProps={{ danger: true }}>
           <Button danger icon={<DeleteOutlined />}>
             Delete
