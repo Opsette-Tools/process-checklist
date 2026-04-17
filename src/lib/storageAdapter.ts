@@ -7,6 +7,7 @@
 export interface StorageAdapter {
   read<T>(key: string, fallback: T): Promise<T>;
   write<T>(key: string, value: T): Promise<void>;
+  remove?(key: string): Promise<void>;
 }
 
 export class LocalStorageAdapter implements StorageAdapter {
@@ -26,6 +27,12 @@ export class LocalStorageAdapter implements StorageAdapter {
     } catch {
       // Quota / private-mode — silently ignore; data stays in-memory this session.
     }
+  }
+
+  async remove(key: string): Promise<void> {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
   }
 }
 

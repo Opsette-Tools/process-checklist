@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
+import { message } from "antd";
 import App from "./App.tsx";
 import "./index.css";
+import { bootstrapStorage } from "./lib/bridgeBootstrap";
 
 const isInIframe = (() => {
   try {
@@ -16,4 +18,17 @@ if (isInIframe) {
   }).catch(() => {});
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+let timeoutToastShown = false;
+function handleBridgeTimeout() {
+  if (timeoutToastShown) return;
+  timeoutToastShown = true;
+  message.error("Couldn't reach Opsette to save. Try again in a moment.");
+  // Allow another toast after a cooldown so repeated failures aren't silenced forever.
+  setTimeout(() => {
+    timeoutToastShown = false;
+  }, 8000);
+}
+
+bootstrapStorage(handleBridgeTimeout).finally(() => {
+  createRoot(document.getElementById("root")!).render(<App />);
+});
