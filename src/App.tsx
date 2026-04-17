@@ -16,17 +16,14 @@ const { Text } = Typography;
 const DARK_KEY = 'opsette.checklist.dark';
 const SELECTED_KEY = 'opsette.checklist.selected';
 
-function AppInner() {
+interface AppInnerProps {
+  isDark: boolean;
+  setIsDark: (v: boolean) => void;
+}
+
+function AppInner({ isDark, setIsDark }: AppInnerProps) {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
-
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(DARK_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
 
   const [checklists, setChecklists] = useState<Checklist[]>(() => loadAll());
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -40,13 +37,7 @@ function AppInner() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
 
-  // Persist
   useEffect(() => saveAll(checklists), [checklists]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(DARK_KEY, isDark ? '1' : '0');
-    } catch {}
-  }, [isDark]);
   useEffect(() => {
     try {
       if (selectedId) localStorage.setItem(SELECTED_KEY, selectedId);
@@ -172,13 +163,19 @@ function AppInner() {
 }
 
 export default function App() {
-  const [isDark] = useState<boolean>(() => {
+  const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       return localStorage.getItem(DARK_KEY) === '1';
     } catch {
       return false;
     }
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DARK_KEY, isDark ? '1' : '0');
+    } catch {}
+  }, [isDark]);
 
   return (
     <ConfigProvider
@@ -191,7 +188,7 @@ export default function App() {
       }}
     >
       <AntApp>
-        <AppInner />
+        <AppInner isDark={isDark} setIsDark={setIsDark} />
       </AntApp>
     </ConfigProvider>
   );
