@@ -22,7 +22,7 @@ export default defineConfig(() => ({
         navigateFallbackDenylist: [/^\/~oauth/],
       },
       manifest: {
-        name: 'Checklist',
+        name: 'Process Checklist',
         short_name: 'Checklist',
         description: 'Create reusable checklists for any multi-step process.',
         display: 'standalone',

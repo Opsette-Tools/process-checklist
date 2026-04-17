@@ -12,7 +12,7 @@ interface HeaderProps {
 
 function Logo() {
   return (
-    <svg width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden>
       <rect width="64" height="64" rx="12" fill="#A97142" />
       <path
         d="M18 33 L28 43 L46 22"
@@ -43,20 +43,21 @@ export default function Header({ isDark, onToggleDark, leftSlot }: HeaderProps) 
         borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
       }}
     >
-      <div style={{ width: 40, display: 'flex', alignItems: 'center' }}>{leftSlot}</div>
+      <div style={{ width: 80, display: 'flex', alignItems: 'center' }}>{leftSlot}</div>
 
       <Space align="center" size={10}>
         <Logo />
         <Title
-          level={4}
+          level={3}
           style={{
             margin: 0,
-            fontSize: 18,
-            letterSpacing: '-0.01em',
+            fontSize: 20,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
             lineHeight: 1,
           }}
         >
-          Checklist
+          Process Checklist
         </Title>
       </Space>
 

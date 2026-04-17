@@ -23,10 +23,10 @@ function Kbd({ children }: { children: React.ReactNode }) {
 export default function AboutModal({ open, onClose }: AboutModalProps) {
   const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
   return (
-    <Modal open={open} onCancel={onClose} footer={null} title="About Checklist">
+    <Modal open={open} onCancel={onClose} footer={null} title="About Process Checklist">
       <Title level={5} style={{ marginTop: 0 }}>A business tool from Opsette Marketplace</Title>
       <Paragraph>
-        Checklist helps service professionals organize multi-step processes like client onboarding, project closeout, or vendor setup.
+        Process Checklist helps service professionals organize multi-step processes like client onboarding, project closeout, or vendor setup.
       </Paragraph>
       <Paragraph>
         Build a template once, then spin up a fresh active checklist every time you run the same process. Track progress, link supporting docs, and copy a clean summary to share with your team.
