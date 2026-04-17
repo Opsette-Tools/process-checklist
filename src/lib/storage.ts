@@ -32,10 +32,11 @@ export function createChecklist(opts: { name?: string; isTemplate?: boolean } = 
   };
 }
 
-export function createStep(opts: { label: string; url?: string; category?: StepCategory; sortOrder: number }): ChecklistStep {
+export function createStep(opts: { label: string; description?: string; url?: string; category?: StepCategory; sortOrder: number }): ChecklistStep {
   return {
     id: uuidv4(),
     label: opts.label,
+    description: opts.description,
     url: opts.url,
     category: opts.category,
     completed: false,
