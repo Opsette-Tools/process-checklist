@@ -188,7 +188,7 @@ export default function ChecklistEditor({
   const handleCopySummary = async () => {
     try {
       await navigator.clipboard.writeText(buildSummary(checklist));
-      message.success('Summary copied to clipboard');
+      message.success('Checklist copied to clipboard as text');
     } catch {
       message.error('Could not copy to clipboard');
     }
