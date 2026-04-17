@@ -1,48 +1,71 @@
 import { useState } from 'react';
-import { Checkbox, Input, Button, Tag, Select, Space, Tooltip } from 'antd';
-import { HolderOutlined, DeleteOutlined, LinkOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
+import { Checkbox, Input, Button, Tag, Select, Space, Tooltip, DatePicker, InputNumber } from 'antd';
+import {
+  HolderOutlined,
+  DeleteOutlined,
+  LinkOutlined,
+  DownOutlined,
+  RightOutlined,
+  CopyOutlined,
+  CalendarOutlined,
+} from '@ant-design/icons';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { ChecklistStep, StepCategory } from '@/types';
+import dayjs, { type Dayjs } from 'dayjs';
+import type { Category, ChecklistStep } from '@/types';
 
 const { TextArea } = Input;
 
-const CATEGORY_COLORS: Record<StepCategory, string> = {
-  doc: 'blue',
-  invoice: 'green',
-  workspace: 'purple',
-  task: 'orange',
-  custom: 'default',
-};
-
-const CATEGORY_OPTIONS: { value: StepCategory; label: string }[] = [
-  { value: 'doc', label: 'Doc' },
-  { value: 'invoice', label: 'Invoice' },
-  { value: 'workspace', label: 'Workspace' },
-  { value: 'task', label: 'Task' },
-  { value: 'custom', label: 'Custom' },
-];
-
 interface StepRowProps {
   step: ChecklistStep;
+  categories: Category[];
+  isTemplate: boolean;
   onChange: (patch: Partial<ChecklistStep>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   isDark: boolean;
 }
 
-export default function StepRow({ step, onChange, onDelete, isDark }: StepRowProps) {
+function dueStatus(dueDate: number | undefined, completed: boolean) {
+  if (!dueDate || completed) return null;
+  const now = Date.now();
+  const diffDays = Math.floor((dueDate - now) / (24 * 60 * 60 * 1000));
+  if (diffDays < 0) return { tone: 'overdue' as const, text: `${Math.abs(diffDays)}d overdue` };
+  if (diffDays === 0) return { tone: 'today' as const, text: 'Due today' };
+  if (diffDays <= 3) return { tone: 'soon' as const, text: `Due in ${diffDays}d` };
+  return { tone: 'later' as const, text: dayjs(dueDate).format('MMM D') };
+}
+
+export default function StepRow({
+  step,
+  categories,
+  isTemplate,
+  onChange,
+  onDelete,
+  onDuplicate,
+  isDark,
+}: StepRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
   const [labelDraft, setLabelDraft] = useState(step.label);
   const [descDraft, setDescDraft] = useState(step.description ?? '');
   const [urlDraft, setUrlDraft] = useState(step.url ?? '');
   const [expanded, setExpanded] = useState(false);
 
-  const hasDetails = !!(step.description || step.url || step.category);
+  const category = categories.find((c) => c.id === step.categoryId);
+  const hasDetails = !!(step.description || step.url || step.categoryId || step.dueDate || step.dueOffsetDays != null);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+  };
+
+  const due = dueStatus(step.dueDate, step.completed);
+  const dueColor: Record<string, string> = {
+    overdue: 'red',
+    today: 'volcano',
+    soon: 'gold',
+    later: 'default',
   };
 
   return (
@@ -89,9 +112,19 @@ export default function StepRow({ step, onChange, onDelete, isDark }: StepRowPro
               />
             </Tooltip>
           )}
-          {step.category && (
-            <Tag color={CATEGORY_COLORS[step.category]} style={{ margin: 0 }}>
-              {step.category}
+          {due && (
+            <Tag color={dueColor[due.tone]} style={{ margin: 0 }} icon={<CalendarOutlined />}>
+              {due.text}
+            </Tag>
+          )}
+          {!due && isTemplate && typeof step.dueOffsetDays === 'number' && (
+            <Tag color="default" style={{ margin: 0 }} icon={<CalendarOutlined />}>
+              +{step.dueOffsetDays}d
+            </Tag>
+          )}
+          {category && (
+            <Tag color={category.color} style={{ margin: 0 }}>
+              {category.label}
             </Tag>
           )}
           <Tooltip title={expanded ? 'Hide details' : hasDetails ? 'Show details' : 'Add details'}>
@@ -101,6 +134,9 @@ export default function StepRow({ step, onChange, onDelete, isDark }: StepRowPro
               icon={expanded ? <DownOutlined /> : <RightOutlined />}
               onClick={() => setExpanded((v) => !v)}
             />
+          </Tooltip>
+          <Tooltip title="Duplicate step">
+            <Button type="text" size="small" icon={<CopyOutlined />} onClick={onDuplicate} />
           </Tooltip>
           <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={onDelete} />
         </Space>
@@ -123,23 +159,41 @@ export default function StepRow({ step, onChange, onDelete, isDark }: StepRowPro
               onBlur={() => onChange({ url: urlDraft.trim() || undefined })}
               placeholder="Optional URL (https://...)"
               prefix={<LinkOutlined style={{ color: '#999' }} />}
-              style={{ width: 280 }}
+              style={{ width: 260 }}
             />
             <Select
               size="middle"
-              value={step.category}
-              onChange={(v) => onChange({ category: v })}
+              value={step.categoryId}
+              onChange={(v) => onChange({ categoryId: v })}
               allowClear
-              onClear={() => onChange({ category: undefined })}
+              onClear={() => onChange({ categoryId: undefined })}
               placeholder="Category"
-              style={{ width: 140 }}
-              options={CATEGORY_OPTIONS}
+              style={{ width: 160 }}
+              options={categories.map((c) => ({
+                value: c.id,
+                label: <Tag color={c.color} style={{ margin: 0 }}>{c.label}</Tag>,
+              }))}
             />
+            {isTemplate ? (
+              <InputNumber
+                min={0}
+                max={3650}
+                value={step.dueOffsetDays ?? null}
+                onChange={(v) => onChange({ dueOffsetDays: typeof v === 'number' ? v : undefined })}
+                placeholder="Days after start"
+                addonAfter="days"
+                style={{ width: 160 }}
+              />
+            ) : (
+              <DatePicker
+                value={step.dueDate ? dayjs(step.dueDate) : null}
+                onChange={(d: Dayjs | null) => onChange({ dueDate: d ? d.valueOf() : undefined })}
+                placeholder="Due date"
+              />
+            )}
           </Space>
         </div>
       )}
     </div>
   );
 }
-
-export { CATEGORY_COLORS, CATEGORY_OPTIONS };

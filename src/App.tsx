@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ConfigProvider, theme, Layout, Grid, Drawer, Button, Typography, Space, App as AntApp } from 'antd';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ConfigProvider, theme, Layout, Grid, Drawer, Button, Space, App as AntApp, message } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
-import ChecklistEditor from '@/components/ChecklistEditor';
+import ChecklistEditor, { type ChecklistEditorHandle } from '@/components/ChecklistEditor';
 import EmptyState from '@/components/EmptyState';
 import AboutModal from '@/components/AboutModal';
 import PrivacyModal from '@/components/PrivacyModal';
@@ -11,7 +11,6 @@ import { createChecklist, loadAll, saveAll } from '@/lib/storage';
 import type { Checklist } from '@/types';
 
 const { Sider, Content, Footer } = Layout;
-const { Text } = Typography;
 
 const DARK_KEY = 'opsette.checklist.dark';
 const SELECTED_KEY = 'opsette.checklist.selected';
@@ -21,11 +20,19 @@ interface AppInnerProps {
   setIsDark: (v: boolean) => void;
 }
 
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
 function AppInner({ isDark, setIsDark }: AppInnerProps) {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
 
-  const [checklists, setChecklists] = useState<Checklist[]>(() => loadAll());
+  const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(SELECTED_KEY);
@@ -37,7 +44,27 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
 
-  useEffect(() => saveAll(checklists), [checklists]);
+  const editorRef = useRef<ChecklistEditorHandle>(null);
+  const [messageApi, messageContext] = message.useMessage();
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAll().then((lists) => {
+      if (!cancelled) {
+        setChecklists(lists);
+        setLoaded(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    saveAll(checklists);
+  }, [checklists, loaded]);
+
   useEffect(() => {
     try {
       if (selectedId) localStorage.setItem(SELECTED_KEY, selectedId);
@@ -47,7 +74,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   const selected = useMemo(
     () => checklists.find((c) => c.id === selectedId) ?? null,
-    [checklists, selectedId]
+    [checklists, selectedId],
   );
 
   const handleNew = () => {
@@ -70,11 +97,70 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     setChecklists((prev) => [c, ...prev]);
   };
 
-  const handleDelete = () => {
+  const handleDeleteSelected = () => {
     if (!selectedId) return;
+    const removed = checklists.find((c) => c.id === selectedId);
+    if (!removed) return;
+    const removedIndex = checklists.findIndex((c) => c.id === selectedId);
     setChecklists((prev) => prev.filter((c) => c.id !== selectedId));
     setSelectedId(null);
+
+    messageApi.open({
+      key: `undo-checklist-${removed.id}`,
+      type: 'info',
+      duration: 6,
+      content: (
+        <span>
+          "{removed.name}" deleted.{' '}
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            onClick={() => {
+              setChecklists((prev) => {
+                const next = [...prev];
+                const insertAt = Math.min(removedIndex, next.length);
+                next.splice(insertAt, 0, removed);
+                return next;
+              });
+              setSelectedId(removed.id);
+              messageApi.destroy(`undo-checklist-${removed.id}`);
+            }}
+          >
+            Undo
+          </Button>
+        </span>
+      ),
+    });
   };
+
+  // Keyboard shortcuts: Cmd/Ctrl+N new, "/" focus add-step, Esc close drawer/modals
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+
+      if (mod && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        handleNew();
+        return;
+      }
+
+      if (e.key === '/' && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        editorRef.current?.focusAddStep();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (drawerOpen) setDrawerOpen(false);
+        else if (aboutOpen) setAboutOpen(false);
+        else if (privacyOpen) setPrivacyOpen(false);
+        else if (isTypingTarget(e.target)) (e.target as HTMLElement).blur();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [drawerOpen, aboutOpen, privacyOpen]);
 
   const sidebar = (
     <Sidebar
@@ -90,7 +176,8 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   ) : null;
 
   return (
-    <Layout style={{ minHeight: '100vh', background: isDark ? '#000' : '#f5f5f5' }}>
+    <Layout style={{ minHeight: '100vh', background: isDark ? '#000' : '#faf6f1' }}>
+      {messageContext}
       <Header isDark={isDark} onToggleDark={setIsDark} leftSlot={headerLeft} />
       <Layout style={{ background: 'transparent' }}>
         {!isMobile && (
@@ -100,9 +187,9 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             style={{
               background: isDark ? '#141414' : '#ffffff',
               borderRight: `1px solid ${isDark ? '#303030' : '#f0f0f0'}`,
-              height: 'calc(100vh - 64px)',
+              height: 'calc(100vh - 56px)',
               position: 'sticky',
-              top: 64,
+              top: 56,
               overflow: 'hidden',
             }}
           >
@@ -121,12 +208,13 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             {sidebar}
           </Drawer>
         )}
-        <Content style={{ background: isDark ? '#000' : '#f5f5f5' }}>
+        <Content style={{ background: isDark ? '#000' : '#faf6f1' }}>
           {selected ? (
             <ChecklistEditor
+              ref={editorRef}
               checklist={selected}
               onUpdate={handleUpdate}
-              onDelete={handleDelete}
+              onDelete={handleDeleteSelected}
               onCreate={handleCreate}
               onSwitchTo={setSelectedId}
               isDark={isDark}
@@ -139,19 +227,41 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             style={{
               textAlign: 'center',
               background: 'transparent',
-              padding: '16px 24px 32px',
+              padding: '16px 20px',
+              fontSize: 13,
+              color: isDark ? '#64748B' : '#94A3B8',
             }}
           >
-            <Space split={<Text type="secondary">·</Text>}>
-              <Button type="link" size="small" onClick={() => setAboutOpen(true)}>
+            <Space split={<span style={{ color: isDark ? '#475569' : '#CBD5E1' }}>&middot;</span>}>
+              <button
+                onClick={() => setAboutOpen(true)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'inherit', fontSize: 'inherit', padding: 0,
+                }}
+              >
                 About
-              </Button>
-              <Button type="link" size="small" onClick={() => setPrivacyOpen(true)}>
+              </button>
+              <button
+                onClick={() => setPrivacyOpen(true)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'inherit', fontSize: 'inherit', padding: 0,
+                }}
+              >
                 Privacy
-              </Button>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Opsette Marketplace
-              </Text>
+              </button>
+              <span>
+                By{' '}
+                <a
+                  href="https://opsette.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'inherit', textDecoration: 'underline' }}
+                >
+                  Opsette
+                </a>
+              </span>
             </Space>
           </Footer>
         </Content>
@@ -182,7 +292,7 @@ export default function App() {
       theme={{
         algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          colorPrimary: '#52c41a',
+          colorPrimary: '#A97142',
           borderRadius: 8,
         },
       }}

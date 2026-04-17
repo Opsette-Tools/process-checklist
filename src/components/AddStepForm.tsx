@@ -1,37 +1,75 @@
-import { useState } from 'react';
-import { Input, Button, Select, Space, Tag } from 'antd';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { Input, Button, Select, Space, Tag, DatePicker, InputNumber } from 'antd';
+import type { InputRef } from 'antd';
 import { PlusOutlined, LinkOutlined } from '@ant-design/icons';
-import type { StepCategory } from '@/types';
-import { CATEGORY_COLORS, CATEGORY_OPTIONS } from './StepRow';
+import dayjs, { type Dayjs } from 'dayjs';
+import type { Category } from '@/types';
 
 const { TextArea } = Input;
 
-interface AddStepFormProps {
-  onAdd: (label: string, description?: string, url?: string, category?: StepCategory) => void;
+export interface AddStepFormHandle {
+  focus: () => void;
 }
 
-export default function AddStepForm({ onAdd }: AddStepFormProps) {
+interface AddStepFormProps {
+  categories: Category[];
+  isTemplate: boolean;
+  onAdd: (args: {
+    label: string;
+    description?: string;
+    url?: string;
+    categoryId?: string;
+    dueDate?: number;
+    dueOffsetDays?: number;
+  }) => void;
+}
+
+const AddStepForm = forwardRef<AddStepFormHandle, AddStepFormProps>(function AddStepForm(
+  { categories, isTemplate, onAdd },
+  ref,
+) {
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
-  const [category, setCategory] = useState<StepCategory | undefined>(undefined);
+  const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
+  const [dueDate, setDueDate] = useState<Dayjs | null>(null);
+  const [dueOffsetDays, setDueOffsetDays] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const inputRef = useRef<InputRef>(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
+
+  const reset = () => {
+    setLabel('');
+    setDescription('');
+    setUrl('');
+    setCategoryId(undefined);
+    setDueDate(null);
+    setDueOffsetDays(null);
+    setExpanded(false);
+  };
 
   const handleAdd = () => {
     const trimmed = label.trim();
     if (!trimmed) return;
-    onAdd(trimmed, description.trim() || undefined, url.trim() || undefined, category);
-    setLabel('');
-    setDescription('');
-    setUrl('');
-    setCategory(undefined);
-    setExpanded(false);
+    onAdd({
+      label: trimmed,
+      description: description.trim() || undefined,
+      url: url.trim() || undefined,
+      categoryId,
+      dueDate: dueDate ? dueDate.valueOf() : undefined,
+      dueOffsetDays: typeof dueOffsetDays === 'number' ? dueOffsetDays : undefined,
+    });
+    reset();
   };
 
   return (
     <div style={{ marginTop: 8 }}>
       <Space.Compact style={{ width: '100%' }}>
         <Input
+          ref={inputRef}
           placeholder="Add a step name..."
           value={label}
           onChange={(e) => setLabel(e.target.value)}
@@ -60,19 +98,38 @@ export default function AddStepForm({ onAdd }: AddStepFormProps) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onPressEnter={handleAdd}
-              style={{ width: 260 }}
+              style={{ width: 240 }}
               prefix={<LinkOutlined style={{ color: '#999' }} />}
             />
             <Select
               placeholder="Category"
-              value={category}
-              onChange={setCategory}
+              value={categoryId}
+              onChange={setCategoryId}
               allowClear
-              options={CATEGORY_OPTIONS}
-              style={{ width: 140 }}
-              tagRender={({ label, value }) => <Tag color={CATEGORY_COLORS[value as StepCategory]}>{label}</Tag>}
+              options={categories.map((c) => ({
+                value: c.id,
+                label: <Tag color={c.color} style={{ margin: 0 }}>{c.label}</Tag>,
+              }))}
+              style={{ width: 160 }}
             />
-            <Button type="text" size="small" onClick={() => { setExpanded(false); }}>
+            {isTemplate ? (
+              <InputNumber
+                min={0}
+                max={3650}
+                value={dueOffsetDays}
+                onChange={(v) => setDueOffsetDays(typeof v === 'number' ? v : null)}
+                placeholder="Days after start"
+                addonAfter="days"
+                style={{ width: 160 }}
+              />
+            ) : (
+              <DatePicker
+                value={dueDate}
+                onChange={(d) => setDueDate(d ? dayjs(d) : null)}
+                placeholder="Due date"
+              />
+            )}
+            <Button type="text" size="small" onClick={() => setExpanded(false)}>
               Hide
             </Button>
           </Space>
@@ -80,4 +137,6 @@ export default function AddStepForm({ onAdd }: AddStepFormProps) {
       )}
     </div>
   );
-}
+});
+
+export default AddStepForm;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Input,
   Typography,
@@ -6,11 +6,11 @@ import {
   Space,
   Tag,
   Progress,
-  Popconfirm,
   message,
   Modal,
   Result,
   Tooltip,
+  Grid,
 } from 'antd';
 import {
   CopyOutlined,
@@ -19,6 +19,7 @@ import {
   CopyFilled,
   StarFilled,
   CheckCircleFilled,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import {
   DndContext,
@@ -30,14 +31,19 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import confetti from 'canvas-confetti';
-import type { Checklist, ChecklistStep, StepCategory } from '@/types';
-import { createStep, duplicateAsActive, duplicateAsTemplate } from '@/lib/storage';
+import type { Category, Checklist, ChecklistStep } from '@/types';
+import { createStep, duplicateStep, duplicateAsActive, duplicateAsTemplate } from '@/lib/storage';
 import { copyChecklistToClipboard } from '@/lib/summary';
 import StepRow from './StepRow';
-import AddStepForm from './AddStepForm';
+import AddStepForm, { type AddStepFormHandle } from './AddStepForm';
+import CategoryManager from './CategoryManager';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { TextArea } = Input;
+
+export interface ChecklistEditorHandle {
+  focusAddStep: () => void;
+}
 
 interface ChecklistEditorProps {
   checklist: Checklist;
@@ -48,17 +54,22 @@ interface ChecklistEditorProps {
   isDark: boolean;
 }
 
-export default function ChecklistEditor({
-  checklist,
-  onUpdate,
-  onDelete,
-  onCreate,
-  onSwitchTo,
-  isDark,
-}: ChecklistEditorProps) {
+const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(function ChecklistEditor(
+  { checklist, onUpdate, onDelete, onCreate, onSwitchTo, isDark },
+  ref,
+) {
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
   const [nameDraft, setNameDraft] = useState(checklist.name);
   const [descDraft, setDescDraft] = useState(checklist.description ?? '');
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const lastCompleteIdRef = useRef<string | null>(null);
+  const addStepRef = useRef<AddStepFormHandle>(null);
+  const [messageApi, messageContext] = message.useMessage();
+
+  useImperativeHandle(ref, () => ({
+    focusAddStep: () => addStepRef.current?.focus(),
+  }));
 
   useEffect(() => {
     setNameDraft(checklist.name);
@@ -67,7 +78,7 @@ export default function ChecklistEditor({
 
   const sortedSteps = useMemo(
     () => [...checklist.steps].sort((a, b) => a.sortOrder - b.sortOrder),
-    [checklist.steps]
+    [checklist.steps],
   );
 
   const total = sortedSteps.length;
@@ -75,7 +86,6 @@ export default function ChecklistEditor({
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const allDone = total > 0 && done === total;
 
-  // Confetti when transitioning to all-done
   useEffect(() => {
     if (checklist.isTemplate) return;
     if (allDone && lastCompleteIdRef.current !== checklist.id) {
@@ -85,7 +95,7 @@ export default function ChecklistEditor({
           particleCount: 90,
           spread: 70,
           origin: { y: 0.6 },
-          colors: ['#52c41a', '#73d13d', '#b7eb8f', '#ffffff'],
+          colors: ['#A97142', '#C9986A', '#E4C49A', '#ffffff'],
         });
       } catch {}
       if (!checklist.completedAt) {
@@ -112,15 +122,61 @@ export default function ChecklistEditor({
   };
 
   const deleteStep = (id: string) => {
-    patch({
-      steps: checklist.steps
-        .filter((s) => s.id !== id)
-        .map((s, i) => ({ ...s, sortOrder: i })),
+    const removed = checklist.steps.find((s) => s.id === id);
+    if (!removed) return;
+    const next = checklist.steps
+      .filter((s) => s.id !== id)
+      .map((s, i) => ({ ...s, sortOrder: i }));
+    patch({ steps: next });
+
+    messageApi.open({
+      key: `undo-step-${removed.id}`,
+      type: 'info',
+      duration: 5,
+      content: (
+        <span>
+          Step deleted.{' '}
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            onClick={() => {
+              const restored = [...next];
+              const insertAt = Math.min(removed.sortOrder, restored.length);
+              restored.splice(insertAt, 0, removed);
+              patch({ steps: restored.map((s, i) => ({ ...s, sortOrder: i })) });
+              messageApi.destroy(`undo-step-${removed.id}`);
+            }}
+          >
+            Undo
+          </Button>
+        </span>
+      ),
     });
   };
 
-  const addStep = (label: string, description?: string, url?: string, category?: StepCategory) => {
-    const next = createStep({ label, description, url, category, sortOrder: checklist.steps.length });
+  const duplicateStepById = (id: string) => {
+    const src = checklist.steps.find((s) => s.id === id);
+    if (!src) return;
+    const srcIndex = sortedSteps.findIndex((s) => s.id === id);
+    const copy = duplicateStep(src, srcIndex + 1);
+    const next = [
+      ...sortedSteps.slice(0, srcIndex + 1),
+      copy,
+      ...sortedSteps.slice(srcIndex + 1),
+    ].map((s, i) => ({ ...s, sortOrder: i }));
+    patch({ steps: next });
+  };
+
+  const addStep = (args: {
+    label: string;
+    description?: string;
+    url?: string;
+    categoryId?: string;
+    dueDate?: number;
+    dueOffsetDays?: number;
+  }) => {
+    const next = createStep({ ...args, sortOrder: checklist.steps.length });
     patch({ steps: [...checklist.steps, next] });
   };
 
@@ -157,7 +213,7 @@ export default function ChecklistEditor({
         const created = duplicateAsActive(checklist, finalName);
         onCreate(created);
         onSwitchTo(created.id);
-        message.success('Active checklist created');
+        messageApi.success('Active checklist created');
       },
     });
   };
@@ -181,7 +237,7 @@ export default function ChecklistEditor({
       onOk: () => {
         const created = duplicateAsTemplate(checklist, name.trim() || `${checklist.name} (Template)`);
         onCreate(created);
-        message.success('Template saved');
+        messageApi.success('Template saved');
       },
     });
   };
@@ -189,15 +245,35 @@ export default function ChecklistEditor({
   const handleCopySummary = async () => {
     try {
       await copyChecklistToClipboard(checklist);
-      message.success('Checklist copied — paste into Docs, Notion, email, etc.');
+      messageApi.success('Checklist copied — paste into Docs, Notion, email, etc.');
     } catch {
-      message.error('Could not copy to clipboard');
+      messageApi.error('Could not copy to clipboard');
     }
+  };
+
+  const handleDeleteChecklist = () => {
+    Modal.confirm({
+      title: 'Delete this checklist?',
+      content: 'You can undo this from the toast that appears.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      onOk: onDelete,
+    });
+  };
+
+  const handleCategoriesChange = (next: Category[]) => {
+    // If a category was removed, clear it from any steps using it.
+    const validIds = new Set(next.map((c) => c.id));
+    const steps = checklist.steps.map((s) =>
+      s.categoryId && !validIds.has(s.categoryId) ? { ...s, categoryId: undefined } : s,
+    );
+    patch({ categories: next, steps });
   };
 
   return (
     <div style={{ padding: 16, maxWidth: 900, margin: '0 auto' }}>
-      {/* Title + badge */}
+      {messageContext}
+
       <Space align="center" style={{ marginBottom: 4 }} wrap>
         {checklist.isTemplate && (
           <Tag icon={<StarFilled />} color="gold">TEMPLATE</Tag>
@@ -227,37 +303,44 @@ export default function ChecklistEditor({
         style={{ padding: '4px 0', marginBottom: 12, color: isDark ? '#aaa' : '#666' }}
       />
 
-      {/* Progress */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
             {total === 0 ? 'No steps yet' : `${done}/${total} steps · ${pct}%`}
           </Text>
         </div>
-        <Progress percent={pct} showInfo={false} strokeColor="#52c41a" size="small" />
+        <Progress percent={pct} showInfo={false} strokeColor="#A97142" size="small" />
       </div>
 
-      {/* Action bar */}
       <Space wrap className="no-print" style={{ marginBottom: 16 }}>
         {checklist.isTemplate ? (
-          <Button type="primary" icon={<CopyFilled />} onClick={handleUseTemplate}>
-            Use Template
-          </Button>
+          <Tooltip title="Use this template">
+            <Button type="primary" icon={<CopyFilled />} onClick={handleUseTemplate}>
+              {isMobile ? null : 'Use Template'}
+            </Button>
+          </Tooltip>
         ) : (
-          <Button icon={<SaveOutlined />} onClick={handleSaveAsTemplate}>
-            Save as Template
-          </Button>
+          <Tooltip title="Save as template">
+            <Button icon={<SaveOutlined />} onClick={handleSaveAsTemplate}>
+              {isMobile ? null : 'Save as Template'}
+            </Button>
+          </Tooltip>
         )}
-        <Tooltip title="Copies as rich text (heading + bullets with sub-bullets for URLs). Pastes formatted into Docs, Notion, email; falls back to plain text elsewhere.">
+        <Tooltip title="Copy as rich text — pastes formatted into Docs, Notion, email.">
           <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
-            Copy
+            {isMobile ? null : 'Copy'}
           </Button>
         </Tooltip>
-        <Popconfirm title="Delete this checklist?" onConfirm={onDelete} okText="Delete" okButtonProps={{ danger: true }}>
-          <Button danger icon={<DeleteOutlined />}>
-            Delete
+        <Tooltip title="Manage categories">
+          <Button icon={<AppstoreOutlined />} onClick={() => setCategoryManagerOpen(true)}>
+            {isMobile ? null : 'Categories'}
           </Button>
-        </Popconfirm>
+        </Tooltip>
+        <Tooltip title="Delete checklist">
+          <Button danger icon={<DeleteOutlined />} onClick={handleDeleteChecklist}>
+            {isMobile ? null : 'Delete'}
+          </Button>
+        </Tooltip>
       </Space>
 
       {allDone && !checklist.isTemplate && (
@@ -269,16 +352,18 @@ export default function ChecklistEditor({
         />
       )}
 
-      {/* Steps */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={sortedSteps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           {sortedSteps.map((step) => (
             <StepRow
               key={step.id}
               step={step}
+              categories={checklist.categories}
+              isTemplate={checklist.isTemplate}
               isDark={isDark}
               onChange={(p) => updateStep(step.id, p)}
               onDelete={() => deleteStep(step.id)}
+              onDuplicate={() => duplicateStepById(step.id)}
             />
           ))}
         </SortableContext>
@@ -298,7 +383,21 @@ export default function ChecklistEditor({
         </div>
       )}
 
-      <AddStepForm onAdd={addStep} />
+      <AddStepForm
+        ref={addStepRef}
+        categories={checklist.categories}
+        isTemplate={checklist.isTemplate}
+        onAdd={addStep}
+      />
+
+      <CategoryManager
+        open={categoryManagerOpen}
+        categories={checklist.categories}
+        onClose={() => setCategoryManagerOpen(false)}
+        onChange={handleCategoriesChange}
+      />
     </div>
   );
-}
+});
+
+export default ChecklistEditor;

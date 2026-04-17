@@ -40,7 +40,7 @@ export default function Sidebar({ checklists, selectedId, onSelect, onNew }: Sid
                   padding: '8px 12px',
                   borderRadius: 6,
                   margin: '2px 6px',
-                  background: isSelected ? 'rgba(82, 196, 26, 0.12)' : 'transparent',
+                  background: isSelected ? 'rgba(169, 113, 66, 0.14)' : 'transparent',
                   border: 'none',
                   transition: 'background 0.15s',
                 }}

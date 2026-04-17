@@ -10,13 +10,7 @@ const isInIframe = (() => {
   }
 })();
 
-const isPreviewHost =
-  typeof window !== 'undefined' &&
-  (window.location.hostname.includes('id-preview--') ||
-    window.location.hostname.includes('lovableproject.com') ||
-    window.location.hostname.includes('lovable.app'));
-
-if (isInIframe || isPreviewHost) {
+if (isInIframe) {
   navigator.serviceWorker?.getRegistrations().then((registrations) => {
     registrations.forEach((r) => r.unregister());
   }).catch(() => {});
