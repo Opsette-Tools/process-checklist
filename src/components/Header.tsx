@@ -8,10 +8,9 @@ interface HeaderProps {
   isDark: boolean;
   onToggleDark: (v: boolean) => void;
   leftSlot?: React.ReactNode;
-  rightSlot?: React.ReactNode;
 }
 
-export default function Header({ isDark, onToggleDark, leftSlot, rightSlot }: HeaderProps) {
+export default function Header({ isDark, onToggleDark, leftSlot }: HeaderProps) {
   return (
     <AntHeader
       className="no-print"
@@ -46,25 +45,22 @@ export default function Header({ isDark, onToggleDark, leftSlot, rightSlot }: He
         </Title>
       </Space>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {rightSlot}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <SunOutlined
-            style={{
-              opacity: isDark ? 0.4 : 1,
-              fontSize: 13,
-              color: isDark ? '#94A3B8' : '#64748B',
-            }}
-          />
-          <Switch checked={isDark} onChange={onToggleDark} size="small" />
-          <MoonOutlined
-            style={{
-              opacity: isDark ? 1 : 0.4,
-              fontSize: 13,
-              color: isDark ? '#E4C49A' : '#94A3B8',
-            }}
-          />
-        </div>
+      <div style={{ width: 80, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+        <SunOutlined
+          style={{
+            opacity: isDark ? 0.4 : 1,
+            fontSize: 13,
+            color: isDark ? '#94A3B8' : '#64748B',
+          }}
+        />
+        <Switch checked={isDark} onChange={onToggleDark} size="small" />
+        <MoonOutlined
+          style={{
+            opacity: isDark ? 1 : 0.4,
+            fontSize: 13,
+            color: isDark ? '#E4C49A' : '#94A3B8',
+          }}
+        />
       </div>
     </AntHeader>
   );

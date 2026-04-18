@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Category, Checklist, ChecklistStep } from '@/types';
-import { getStorageAdapter } from './storageAdapter';
 
 const STORAGE_KEY = 'opsette.checklist.v1';
 
@@ -66,13 +65,23 @@ function migrateChecklist(raw: unknown): Checklist | null {
 }
 
 export async function loadAll(): Promise<Checklist[]> {
-  const raw = await getStorageAdapter().read<unknown[]>(STORAGE_KEY, []);
-  if (!Array.isArray(raw)) return [];
-  return raw.map(migrateChecklist).filter((c): c is Checklist => c !== null);
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(migrateChecklist).filter((c): c is Checklist => c !== null);
+  } catch {
+    return [];
+  }
 }
 
 export async function saveAll(lists: Checklist[]): Promise<void> {
-  await getStorageAdapter().write(STORAGE_KEY, lists);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lists));
+  } catch {
+    // Quota / private-mode — silently ignore
+  }
 }
 
 export function createChecklist(opts: { name?: string; isTemplate?: boolean } = {}): Checklist {
