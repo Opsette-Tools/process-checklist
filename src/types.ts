@@ -1,12 +1,12 @@
 export interface Category {
-  id: string;
+  data_id: string;
   label: string;
   /** Ant Design color keyword or hex. */
   color: string;
 }
 
 export interface ChecklistStep {
-  id: string;
+  data_id: string;
   label: string;
   description?: string;
   url?: string;
@@ -20,17 +20,22 @@ export interface ChecklistStep {
 }
 
 export interface Checklist {
-  id: string;
+  data_id: string;
   name: string;
   description?: string;
   isTemplate: boolean;
   sourceTemplateId?: string;
   steps: ChecklistStep[];
-  /** Per-checklist category vocabulary. */
-  categories: Category[];
   createdAt: number;
   updatedAt: number;
   completedAt?: number;
+}
+
+/** Org-wide presets stored in iframe_apps.presets (JSONB) in the parent.
+ *  For Process Checklist, this currently holds only categories, but the
+ *  shape is open so future keys can land here without a schema change. */
+export interface Presets {
+  categories: Category[];
 }
 
 /** Ant Design color names recognised by `<Tag color=...>`. */

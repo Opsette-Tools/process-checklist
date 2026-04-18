@@ -1,4 +1,4 @@
-import type { Checklist } from '@/types';
+import type { Category, Checklist } from '@/types';
 
 const escapeHtml = (s: string) =>
   s
@@ -20,8 +20,8 @@ function formatDueDate(ms: number): string {
 }
 
 /** Plain-text fallback for clipboards that don't accept HTML. */
-export function buildSummary(checklist: Checklist): string {
-  const catById = new Map(checklist.categories.map((c) => [c.id, c.label]));
+export function buildSummary(checklist: Checklist, categories: Category[]): string {
+  const catById = new Map(categories.map((c) => [c.data_id, c.label]));
   const lines = [checklist.name];
   if (checklist.description) lines.push(checklist.description, '');
   const sorted = [...checklist.steps].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -42,8 +42,8 @@ export function buildSummary(checklist: Checklist): string {
 }
 
 /** Rich HTML version — pastes as a formatted heading + bulleted list with sub-bullets. */
-export function buildSummaryHtml(checklist: Checklist): string {
-  const catById = new Map(checklist.categories.map((c) => [c.id, c.label]));
+export function buildSummaryHtml(checklist: Checklist, categories: Category[]): string {
+  const catById = new Map(categories.map((c) => [c.data_id, c.label]));
   const sorted = [...checklist.steps].sort((a, b) => a.sortOrder - b.sortOrder);
   const parts: string[] = [];
   parts.push(`<h2>${escapeHtml(checklist.name)}</h2>`);
@@ -81,9 +81,9 @@ export function buildSummaryHtml(checklist: Checklist): string {
   return parts.join('');
 }
 
-export async function copyChecklistToClipboard(checklist: Checklist): Promise<void> {
-  const html = buildSummaryHtml(checklist);
-  const text = buildSummary(checklist);
+export async function copyChecklistToClipboard(checklist: Checklist, categories: Category[]): Promise<void> {
+  const html = buildSummaryHtml(checklist, categories);
+  const text = buildSummary(checklist, categories);
 
   if (
     typeof ClipboardItem !== 'undefined' &&

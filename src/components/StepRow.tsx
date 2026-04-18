@@ -45,13 +45,13 @@ export default function StepRow({
   onDuplicate,
   isDark,
 }: StepRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.data_id });
   const [labelDraft, setLabelDraft] = useState(step.label);
   const [descDraft, setDescDraft] = useState(step.description ?? '');
   const [urlDraft, setUrlDraft] = useState(step.url ?? '');
   const [expanded, setExpanded] = useState(false);
 
-  const category = categories.find((c) => c.id === step.categoryId);
+  const category = categories.find((c) => c.data_id === step.categoryId);
   const hasDetails = !!(step.description || step.url || step.categoryId || step.dueDate || step.dueOffsetDays != null);
 
   const style: React.CSSProperties = {
@@ -171,7 +171,7 @@ export default function StepRow({
               placeholder="Category"
               style={{ width: 160 }}
               options={categories.map((c) => ({
-                value: c.id,
+                value: c.data_id,
                 label: <Tag color={c.color} style={{ margin: 0 }}>{c.label}</Tag>,
               }))}
             />

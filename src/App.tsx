@@ -7,8 +7,8 @@ import ChecklistEditor, { type ChecklistEditorHandle } from '@/components/Checkl
 import EmptyState from '@/components/EmptyState';
 import AboutModal from '@/components/AboutModal';
 import PrivacyModal from '@/components/PrivacyModal';
-import { createChecklist, loadAll, saveAll } from '@/lib/storage';
-import type { Checklist } from '@/types';
+import { createChecklist, defaultPresets, loadAll, saveAll } from '@/lib/storage';
+import type { Checklist, Presets } from '@/types';
 
 const { Sider, Content, Footer } = Layout;
 
@@ -32,8 +32,10 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   const isMobile = !screens.md;
 
   const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [presets, setPresets] = useState<Presets>(() => defaultPresets());
   const [loaded, setLoaded] = useState(false);
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>('[]');
+  const [lastSavedChecklists, setLastSavedChecklists] = useState<string>('[]');
+  const [lastSavedPresets, setLastSavedPresets] = useState<string>('{}');
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(SELECTED_KEY);
@@ -50,10 +52,12 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   useEffect(() => {
     let cancelled = false;
-    loadAll().then((lists) => {
+    loadAll().then(({ checklists: lists, presets: loadedPresets }) => {
       if (!cancelled) {
         setChecklists(lists);
-        setLastSavedSnapshot(JSON.stringify(lists));
+        setPresets(loadedPresets);
+        setLastSavedChecklists(JSON.stringify(lists));
+        setLastSavedPresets(JSON.stringify(loadedPresets));
         setLoaded(true);
       }
     });
@@ -64,22 +68,30 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   const selectedDirty = useMemo(() => {
     if (!loaded || !selectedId) return false;
-    const current = checklists.find((c) => c.id === selectedId);
+    const current = checklists.find((c) => c.data_id === selectedId);
     if (!current) return false;
     let saved: Checklist[] = [];
     try {
-      saved = JSON.parse(lastSavedSnapshot) as Checklist[];
+      saved = JSON.parse(lastSavedChecklists) as Checklist[];
     } catch {
       return true;
     }
-    const savedItem = saved.find((c) => c.id === selectedId);
+    const savedItem = saved.find((c) => c.data_id === selectedId);
     if (!savedItem) return true;
     return JSON.stringify(current) !== JSON.stringify(savedItem);
-  }, [checklists, selectedId, lastSavedSnapshot, loaded]);
+  }, [checklists, selectedId, lastSavedChecklists, loaded]);
+
+  const presetsDirty = useMemo(() => {
+    if (!loaded) return false;
+    return JSON.stringify(presets) !== lastSavedPresets;
+  }, [presets, lastSavedPresets, loaded]);
+
+  const dirty = selectedDirty || presetsDirty;
 
   const handleSave = async () => {
-    await saveAll(checklists);
-    setLastSavedSnapshot(JSON.stringify(checklists));
+    await saveAll(checklists, presets);
+    setLastSavedChecklists(JSON.stringify(checklists));
+    setLastSavedPresets(JSON.stringify(presets));
     messageApi.success('Saved');
   };
 
@@ -91,14 +103,14 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   }, [selectedId]);
 
   const selected = useMemo(
-    () => checklists.find((c) => c.id === selectedId) ?? null,
+    () => checklists.find((c) => c.data_id === selectedId) ?? null,
     [checklists, selectedId],
   );
 
   const handleNew = () => {
     const c = createChecklist({ name: 'Untitled Checklist' });
     setChecklists((prev) => [c, ...prev]);
-    setSelectedId(c.id);
+    setSelectedId(c.data_id);
     if (isMobile) setDrawerOpen(false);
   };
 
@@ -108,7 +120,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   };
 
   const handleUpdate = (next: Checklist) => {
-    setChecklists((prev) => prev.map((c) => (c.id === next.id ? next : c)));
+    setChecklists((prev) => prev.map((c) => (c.data_id === next.data_id ? next : c)));
   };
 
   const handleCreate = (c: Checklist) => {
@@ -117,14 +129,14 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   const handleDeleteSelected = () => {
     if (!selectedId) return;
-    const removed = checklists.find((c) => c.id === selectedId);
+    const removed = checklists.find((c) => c.data_id === selectedId);
     if (!removed) return;
-    const removedIndex = checklists.findIndex((c) => c.id === selectedId);
-    setChecklists((prev) => prev.filter((c) => c.id !== selectedId));
+    const removedIndex = checklists.findIndex((c) => c.data_id === selectedId);
+    setChecklists((prev) => prev.filter((c) => c.data_id !== selectedId));
     setSelectedId(null);
 
     messageApi.open({
-      key: `undo-checklist-${removed.id}`,
+      key: `undo-checklist-${removed.data_id}`,
       type: 'info',
       duration: 6,
       content: (
@@ -141,8 +153,8 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
                 next.splice(insertAt, 0, removed);
                 return next;
               });
-              setSelectedId(removed.id);
-              messageApi.destroy(`undo-checklist-${removed.id}`);
+              setSelectedId(removed.data_id);
+              messageApi.destroy(`undo-checklist-${removed.data_id}`);
             }}
           >
             Undo
@@ -231,12 +243,15 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             <ChecklistEditor
               ref={editorRef}
               checklist={selected}
+              checklists={checklists}
+              presets={presets}
+              onUpdatePresets={setPresets}
               onUpdate={handleUpdate}
               onDelete={handleDeleteSelected}
               onCreate={handleCreate}
               onSwitchTo={setSelectedId}
               onSave={handleSave}
-              dirty={selectedDirty}
+              dirty={dirty}
               isDark={isDark}
             />
           ) : (

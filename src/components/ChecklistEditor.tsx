@@ -31,7 +31,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import confetti from 'canvas-confetti';
-import type { Category, Checklist, ChecklistStep } from '@/types';
+import type { Category, Checklist, ChecklistStep, Presets } from '@/types';
 import { createStep, duplicateStep, duplicateAsActive, duplicateAsTemplate } from '@/lib/storage';
 import { copyChecklistToClipboard } from '@/lib/summary';
 import StepRow from './StepRow';
@@ -47,6 +47,10 @@ export interface ChecklistEditorHandle {
 
 interface ChecklistEditorProps {
   checklist: Checklist;
+  /** All checklists — needed so CategoryManager can show usage counts for delete-protection. */
+  checklists: Checklist[];
+  presets: Presets;
+  onUpdatePresets: (next: Presets) => void;
   onUpdate: (next: Checklist) => void;
   onDelete: () => void;
   onCreate: (c: Checklist) => void;
@@ -57,7 +61,7 @@ interface ChecklistEditorProps {
 }
 
 const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(function ChecklistEditor(
-  { checklist, onUpdate, onDelete, onCreate, onSwitchTo, onSave, dirty, isDark },
+  { checklist, checklists, presets, onUpdatePresets, onUpdate, onDelete, onCreate, onSwitchTo, onSave, dirty, isDark },
   ref,
 ) {
   const screens = Grid.useBreakpoint();
@@ -76,7 +80,7 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
   useEffect(() => {
     setNameDraft(checklist.name);
     setDescDraft(checklist.description ?? '');
-  }, [checklist.id]);
+  }, [checklist.data_id]);
 
   const sortedSteps = useMemo(
     () => [...checklist.steps].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -90,8 +94,8 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
 
   useEffect(() => {
     if (checklist.isTemplate) return;
-    if (allDone && lastCompleteIdRef.current !== checklist.id) {
-      lastCompleteIdRef.current = checklist.id;
+    if (allDone && lastCompleteIdRef.current !== checklist.data_id) {
+      lastCompleteIdRef.current = checklist.data_id;
       try {
         confetti({
           particleCount: 90,
@@ -104,12 +108,12 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
         onUpdate({ ...checklist, completedAt: Date.now(), updatedAt: Date.now() });
       }
     } else if (!allDone) {
-      if (lastCompleteIdRef.current === checklist.id) lastCompleteIdRef.current = null;
+      if (lastCompleteIdRef.current === checklist.data_id) lastCompleteIdRef.current = null;
       if (checklist.completedAt) {
         onUpdate({ ...checklist, completedAt: undefined, updatedAt: Date.now() });
       }
     }
-  }, [allDone, checklist.id]);
+  }, [allDone, checklist.data_id]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -119,20 +123,20 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
 
   const updateStep = (id: string, change: Partial<ChecklistStep>) => {
     patch({
-      steps: checklist.steps.map((s) => (s.id === id ? { ...s, ...change } : s)),
+      steps: checklist.steps.map((s) => (s.data_id === id ? { ...s, ...change } : s)),
     });
   };
 
   const deleteStep = (id: string) => {
-    const removed = checklist.steps.find((s) => s.id === id);
+    const removed = checklist.steps.find((s) => s.data_id === id);
     if (!removed) return;
     const next = checklist.steps
-      .filter((s) => s.id !== id)
+      .filter((s) => s.data_id !== id)
       .map((s, i) => ({ ...s, sortOrder: i }));
     patch({ steps: next });
 
     messageApi.open({
-      key: `undo-step-${removed.id}`,
+      key: `undo-step-${removed.data_id}`,
       type: 'info',
       duration: 5,
       content: (
@@ -147,7 +151,7 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
               const insertAt = Math.min(removed.sortOrder, restored.length);
               restored.splice(insertAt, 0, removed);
               patch({ steps: restored.map((s, i) => ({ ...s, sortOrder: i })) });
-              messageApi.destroy(`undo-step-${removed.id}`);
+              messageApi.destroy(`undo-step-${removed.data_id}`);
             }}
           >
             Undo
@@ -158,9 +162,9 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
   };
 
   const duplicateStepById = (id: string) => {
-    const src = checklist.steps.find((s) => s.id === id);
+    const src = checklist.steps.find((s) => s.data_id === id);
     if (!src) return;
-    const srcIndex = sortedSteps.findIndex((s) => s.id === id);
+    const srcIndex = sortedSteps.findIndex((s) => s.data_id === id);
     const copy = duplicateStep(src, srcIndex + 1);
     const next = [
       ...sortedSteps.slice(0, srcIndex + 1),
@@ -185,7 +189,7 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const ids = sortedSteps.map((s) => s.id);
+    const ids = sortedSteps.map((s) => s.data_id);
     const from = ids.indexOf(active.id as string);
     const to = ids.indexOf(over.id as string);
     if (from < 0 || to < 0) return;
@@ -214,7 +218,7 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
         const finalName = (name || `${checklist.name} — ${new Date().toLocaleDateString()}`).trim();
         const created = duplicateAsActive(checklist, finalName);
         onCreate(created);
-        onSwitchTo(created.id);
+        onSwitchTo(created.data_id);
         messageApi.success('Active checklist created');
       },
     });
@@ -246,7 +250,7 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
 
   const handleCopySummary = async () => {
     try {
-      await copyChecklistToClipboard(checklist);
+      await copyChecklistToClipboard(checklist, presets.categories);
       messageApi.success('Checklist copied — paste into Docs, Notion, email, etc.');
     } catch {
       messageApi.error('Could not copy to clipboard');
@@ -263,13 +267,8 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
     });
   };
 
-  const handleCategoriesChange = (next: Category[]) => {
-    // If a category was removed, clear it from any steps using it.
-    const validIds = new Set(next.map((c) => c.id));
-    const steps = checklist.steps.map((s) =>
-      s.categoryId && !validIds.has(s.categoryId) ? { ...s, categoryId: undefined } : s,
-    );
-    patch({ categories: next, steps });
+  const handleCategoriesChange = (nextCategories: Category[]) => {
+    onUpdatePresets({ ...presets, categories: nextCategories });
   };
 
   const cardStyle: React.CSSProperties = {
@@ -386,17 +385,17 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
         {sortedSteps.length > 0 ? (
           <div style={{ marginBottom: 12 }}>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={sortedSteps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={sortedSteps.map((s) => s.data_id)} strategy={verticalListSortingStrategy}>
                 {sortedSteps.map((step) => (
                   <StepRow
-                    key={step.id}
+                    key={step.data_id}
                     step={step}
-                    categories={checklist.categories}
+                    categories={presets.categories}
                     isTemplate={checklist.isTemplate}
                     isDark={isDark}
-                    onChange={(p) => updateStep(step.id, p)}
-                    onDelete={() => deleteStep(step.id)}
-                    onDuplicate={() => duplicateStepById(step.id)}
+                    onChange={(p) => updateStep(step.data_id, p)}
+                    onDelete={() => deleteStep(step.data_id)}
+                    onDuplicate={() => duplicateStepById(step.data_id)}
                   />
                 ))}
               </SortableContext>
@@ -418,7 +417,7 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
 
         <AddStepForm
           ref={addStepRef}
-          categories={checklist.categories}
+          categories={presets.categories}
           isTemplate={checklist.isTemplate}
           onAdd={addStep}
         />
@@ -426,7 +425,8 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
 
       <CategoryManager
         open={categoryManagerOpen}
-        categories={checklist.categories}
+        categories={presets.categories}
+        checklists={checklists}
         onClose={() => setCategoryManagerOpen(false)}
         onChange={handleCategoriesChange}
       />

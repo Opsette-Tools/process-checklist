@@ -31,10 +31,10 @@ export default function Sidebar({ checklists, selectedId, onSelect, onNew }: Sid
           renderItem={(item) => {
             const done = item.steps.filter((s) => s.completed).length;
             const total = item.steps.length;
-            const isSelected = item.id === selectedId;
+            const isSelected = item.data_id === selectedId;
             return (
               <List.Item
-                onClick={() => onSelect(item.id)}
+                onClick={() => onSelect(item.data_id)}
                 style={{
                   cursor: 'pointer',
                   padding: '8px 12px',

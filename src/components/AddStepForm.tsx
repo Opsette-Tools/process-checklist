@@ -107,7 +107,7 @@ const AddStepForm = forwardRef<AddStepFormHandle, AddStepFormProps>(function Add
               onChange={setCategoryId}
               allowClear
               options={categories.map((c) => ({
-                value: c.id,
+                value: c.data_id,
                 label: <Tag color={c.color} style={{ margin: 0 }}>{c.label}</Tag>,
               }))}
               style={{ width: 160 }}
