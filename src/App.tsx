@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ConfigProvider, theme, Layout, Grid, Drawer, Button, Space, App as AntApp, message } from 'antd';
-import { MenuOutlined } from '@ant-design/icons';
+import { MenuOutlined, SaveOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
 import ChecklistEditor, { type ChecklistEditorHandle } from '@/components/ChecklistEditor';
@@ -14,6 +14,14 @@ const { Sider, Content, Footer } = Layout;
 
 const DARK_KEY = 'opsette.checklist.dark';
 const SELECTED_KEY = 'opsette.checklist.selected';
+
+const isInIframe = (() => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+})();
 
 interface AppInnerProps {
   isDark: boolean;
@@ -33,6 +41,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(SELECTED_KEY);
@@ -47,23 +56,58 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   const editorRef = useRef<ChecklistEditorHandle>(null);
   const [messageApi, messageContext] = message.useMessage();
 
+  // --- Data loading ---
   useEffect(() => {
-    let cancelled = false;
-    loadAll().then((lists) => {
-      if (!cancelled) {
-        setChecklists(lists);
+    if (isInIframe) {
+      const handler = (event: MessageEvent) => {
+        const msg = event.data;
+        if (!msg || typeof msg !== 'object' || msg.type !== 'opsette:data') return;
+
+        if (Array.isArray(msg.value)) {
+          setChecklists(msg.value as Checklist[]);
+        } else {
+          setChecklists([]);
+        }
         setLoaded(true);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+        setDirty(false);
+      };
+      window.addEventListener('message', handler);
+      return () => window.removeEventListener('message', handler);
+    } else {
+      let cancelled = false;
+      loadAll().then((lists) => {
+        if (!cancelled) {
+          setChecklists(lists);
+          setLoaded(true);
+        }
+      });
+      return () => { cancelled = true; };
+    }
   }, []);
 
+  // --- Data saving ---
+  // Standalone: auto-save to localStorage
+  // Iframe: only save when user clicks Save button
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || isInIframe) return;
     saveAll(checklists);
   }, [checklists, loaded]);
+
+  // Mark dirty when checklists change (only matters in iframe)
+  const updateChecklists = useCallback((updater: (prev: Checklist[]) => Checklist[]) => {
+    setChecklists((prev) => {
+      const next = updater(prev);
+      if (isInIframe && loaded) setDirty(true);
+      return next;
+    });
+  }, [loaded]);
+
+  const handleSave = useCallback(() => {
+    if (!isInIframe) return;
+    window.parent.postMessage({ type: 'opsette:save', value: checklists }, '*');
+    setDirty(false);
+    messageApi.success('Saved');
+  }, [checklists, messageApi]);
 
   useEffect(() => {
     try {
@@ -79,7 +123,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   const handleNew = () => {
     const c = createChecklist({ name: 'Untitled Checklist' });
-    setChecklists((prev) => [c, ...prev]);
+    updateChecklists((prev) => [c, ...prev]);
     setSelectedId(c.id);
     if (isMobile) setDrawerOpen(false);
   };
@@ -90,11 +134,11 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   };
 
   const handleUpdate = (next: Checklist) => {
-    setChecklists((prev) => prev.map((c) => (c.id === next.id ? next : c)));
+    updateChecklists((prev) => prev.map((c) => (c.id === next.id ? next : c)));
   };
 
   const handleCreate = (c: Checklist) => {
-    setChecklists((prev) => [c, ...prev]);
+    updateChecklists((prev) => [c, ...prev]);
   };
 
   const handleDeleteSelected = () => {
@@ -102,7 +146,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     const removed = checklists.find((c) => c.id === selectedId);
     if (!removed) return;
     const removedIndex = checklists.findIndex((c) => c.id === selectedId);
-    setChecklists((prev) => prev.filter((c) => c.id !== selectedId));
+    updateChecklists((prev) => prev.filter((c) => c.id !== selectedId));
     setSelectedId(null);
 
     messageApi.open({
@@ -117,7 +161,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
             size="small"
             style={{ padding: 0 }}
             onClick={() => {
-              setChecklists((prev) => {
+              updateChecklists((prev) => {
                 const next = [...prev];
                 const insertAt = Math.min(removedIndex, next.length);
                 next.splice(insertAt, 0, removed);
@@ -134,7 +178,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     });
   };
 
-  // Keyboard shortcuts: Cmd/Ctrl+N new, "/" focus add-step, Esc close drawer/modals
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -142,6 +186,13 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
       if (mod && (e.key === 'n' || e.key === 'N')) {
         e.preventDefault();
         handleNew();
+        return;
+      }
+
+      // Cmd/Ctrl+S to save (iframe only)
+      if (mod && (e.key === 's' || e.key === 'S') && isInIframe) {
+        e.preventDefault();
+        handleSave();
         return;
       }
 
@@ -160,7 +211,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [drawerOpen, aboutOpen, privacyOpen]);
+  }, [drawerOpen, aboutOpen, privacyOpen, handleSave]);
 
   const sidebar = (
     <Sidebar
@@ -175,10 +226,22 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />
   ) : null;
 
+  const saveButton = isInIframe ? (
+    <Button
+      type={dirty ? 'primary' : 'default'}
+      size="small"
+      icon={dirty ? <SaveOutlined /> : <CheckCircleOutlined />}
+      onClick={handleSave}
+      disabled={!dirty}
+    >
+      {dirty ? 'Save' : 'Saved'}
+    </Button>
+  ) : null;
+
   return (
     <Layout style={{ minHeight: '100vh', background: isDark ? '#000' : '#f5f5f5' }}>
       {messageContext}
-      <Header isDark={isDark} onToggleDark={setIsDark} leftSlot={headerLeft} />
+      <Header isDark={isDark} onToggleDark={setIsDark} leftSlot={headerLeft} rightSlot={saveButton} />
       <Layout style={{ background: 'transparent' }}>
         {!isMobile && (
           <Sider

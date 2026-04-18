@@ -8,7 +8,14 @@
 import { ParentBridgeAdapter } from './parentBridgeAdapter';
 import { setStorageAdapter } from './storageAdapter';
 
-const PARENT_ORIGIN = 'https://opsette.io';
+const PARENT_ORIGINS = [
+  'https://opsette.io',
+  'http://localhost:8081',
+];
+
+function isAllowedOrigin(origin: string): boolean {
+  return PARENT_ORIGINS.includes(origin);
+}
 const HANDSHAKE_TIMEOUT_MS = 1000;
 
 export type BridgeStatus = 'idle' | 'standalone' | 'connected' | 'error';
@@ -42,7 +49,7 @@ export function bootstrapStorage(onTimeout: () => void): Promise<BridgeContext> 
     let settled = false;
 
     const handler = (event: MessageEvent) => {
-      if (event.origin !== PARENT_ORIGIN) return;
+      if (!isAllowedOrigin(event.origin)) return;
       const data = event.data as ConfigMessage | undefined;
       if (!data || typeof data !== 'object' || data.type !== 'opsette:config') return;
       if (typeof data.appId !== 'string') return;
@@ -54,7 +61,7 @@ export function bootstrapStorage(onTimeout: () => void): Promise<BridgeContext> 
 
       bridgeStatus = 'connected';
       setStorageAdapter(
-        new ParentBridgeAdapter(parent, PARENT_ORIGIN, () => {
+        new ParentBridgeAdapter(parent, event.origin, () => {
           bridgeStatus = 'error';
           onTimeout();
         }),
@@ -70,6 +77,6 @@ export function bootstrapStorage(onTimeout: () => void): Promise<BridgeContext> 
     }, HANDSHAKE_TIMEOUT_MS);
 
     window.addEventListener('message', handler);
-    parent.postMessage({ type: 'opsette:ready', version: 1 }, PARENT_ORIGIN);
+    parent.postMessage({ type: 'opsette:ready', version: 1 }, '*');
   });
 }
