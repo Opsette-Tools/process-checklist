@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
+import { connectBridge, type Bridge } from "./lib/bridge";
 import "./index.css";
 
 // When rendered inside an iframe, unregister any existing service worker so
@@ -18,4 +19,9 @@ if (isInIframe) {
   }).catch(() => {});
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+// Try the postMessage handshake before rendering so the first load path
+// has either a populated Bridge or a definite "standalone" signal. The
+// bridge attempt resolves within 1s regardless — render is never blocked.
+connectBridge().then((bridge: Bridge | null) => {
+  createRoot(document.getElementById("root")!).render(<App bridge={bridge} />);
+});

@@ -8,6 +8,7 @@ import EmptyState from '@/components/EmptyState';
 import AboutModal from '@/components/AboutModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { createChecklist, defaultPresets, loadAll, saveAll } from '@/lib/storage';
+import type { Bridge } from '@/lib/bridge';
 import type { Checklist, Presets } from '@/types';
 
 const { Sider, Content, Footer } = Layout;
@@ -18,6 +19,7 @@ const SELECTED_KEY = 'opsette.checklist.selected';
 interface AppInnerProps {
   isDark: boolean;
   setIsDark: (v: boolean) => void;
+  bridge: Bridge | null;
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -27,7 +29,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
-function AppInner({ isDark, setIsDark }: AppInnerProps) {
+function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
 
@@ -52,6 +54,28 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Bridge-active: take parent's init as the source of truth; skip local migration
+    // entirely per parent-side guidance (avoids duplicate rows if both have data).
+    if (bridge) {
+      bridge.onTimeout((msg) => {
+        messageApi.error(msg.includes('save_presets')
+          ? 'Couldn\'t save categories. Try again in a moment.'
+          : 'Couldn\'t save to Opsette. Try again in a moment.');
+      });
+      const lists = bridge.init.items.map((i) => i.value);
+      const loadedPresets: Presets = bridge.init.presets?.categories
+        ? bridge.init.presets
+        : defaultPresets();
+      setChecklists(lists);
+      setPresets(loadedPresets);
+      setLastSavedChecklists(JSON.stringify(lists));
+      setLastSavedPresets(JSON.stringify(loadedPresets));
+      setLoaded(true);
+      return;
+    }
+
+    // Standalone: localStorage path, with legacy shape migration on read.
     loadAll().then(({ checklists: lists, presets: loadedPresets }) => {
       if (!cancelled) {
         setChecklists(lists);
@@ -64,7 +88,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bridge, messageApi]);
 
   const selectedDirty = useMemo(() => {
     if (!loaded || !selectedId) return false;
@@ -89,6 +113,40 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   const dirty = selectedDirty || presetsDirty;
 
   const handleSave = async () => {
+    if (bridge) {
+      // Figure out which checklists changed since last save.
+      let savedChecklists: Checklist[] = [];
+      try {
+        savedChecklists = JSON.parse(lastSavedChecklists) as Checklist[];
+      } catch {
+        // treat everything as dirty
+      }
+      const savedById = new Map(savedChecklists.map((c) => [c.data_id, c]));
+      const dirtyChecklists = checklists.filter((c) => {
+        const prev = savedById.get(c.data_id);
+        return !prev || JSON.stringify(prev) !== JSON.stringify(c);
+      });
+      const needsPresets = JSON.stringify(presets) !== lastSavedPresets;
+
+      const ops: Array<Promise<unknown>> = [];
+      for (const c of dirtyChecklists) ops.push(bridge.save(c.data_id, c));
+      if (needsPresets) ops.push(bridge.savePresets(presets));
+
+      try {
+        await Promise.all(ops);
+        setLastSavedChecklists(JSON.stringify(checklists));
+        setLastSavedPresets(JSON.stringify(presets));
+        messageApi.success('Saved');
+      } catch (err) {
+        // The bridge's onTimeout handler already fired a toast for timeouts;
+        // for protocol-level errors, surface the message here too.
+        const errMsg = err instanceof Error ? err.message : 'Save failed';
+        if (!errMsg.includes('timed out')) messageApi.error(errMsg);
+      }
+      return;
+    }
+
+    // Standalone
     await saveAll(checklists, presets);
     setLastSavedChecklists(JSON.stringify(checklists));
     setLastSavedPresets(JSON.stringify(presets));
@@ -134,6 +192,17 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     const removedIndex = checklists.findIndex((c) => c.data_id === selectedId);
     setChecklists((prev) => prev.filter((c) => c.data_id !== selectedId));
     setSelectedId(null);
+
+    // Bridge: fire delete immediately. If the user undoes, the subsequent Save
+    // re-upserts the checklist with the same data_id, which parent treats as an
+    // insert. Net effect: delete-then-resave is idempotent. No coordination needed.
+    if (bridge) {
+      bridge.remove(removed.data_id).catch(() => {
+        // Timeout handler already toasted; nothing else to do on the UI.
+      });
+    } else {
+      // Standalone: removal will be persisted on the next Save click via saveAll.
+    }
 
     messageApi.open({
       key: `undo-checklist-${removed.data_id}`,
@@ -307,7 +376,11 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
   );
 }
 
-export default function App() {
+interface AppProps {
+  bridge?: Bridge | null;
+}
+
+export default function App({ bridge = null }: AppProps) {
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       return localStorage.getItem(DARK_KEY) === '1';
@@ -333,7 +406,7 @@ export default function App() {
       }}
     >
       <AntApp>
-        <AppInner isDark={isDark} setIsDark={setIsDark} />
+        <AppInner isDark={isDark} setIsDark={setIsDark} bridge={bridge} />
       </AntApp>
     </ConfigProvider>
   );
