@@ -51,11 +51,13 @@ interface ChecklistEditorProps {
   onDelete: () => void;
   onCreate: (c: Checklist) => void;
   onSwitchTo: (id: string) => void;
+  onSave: () => void;
+  dirty: boolean;
   isDark: boolean;
 }
 
 const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(function ChecklistEditor(
-  { checklist, onUpdate, onDelete, onCreate, onSwitchTo, isDark },
+  { checklist, onUpdate, onDelete, onCreate, onSwitchTo, onSave, dirty, isDark },
   ref,
 ) {
   const screens = Grid.useBreakpoint();
@@ -328,6 +330,16 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
 
       {/* Action bar */}
       <Space wrap className="no-print" style={{ marginBottom: 16 }}>
+        <Tooltip title={dirty ? 'Save changes' : 'No changes to save'}>
+          <Button
+            type={dirty ? 'primary' : 'default'}
+            icon={<SaveOutlined />}
+            onClick={onSave}
+            disabled={!dirty}
+          >
+            {isMobile ? null : 'Save'}
+          </Button>
+        </Tooltip>
         {checklist.isTemplate ? (
           <Tooltip title="Use this template">
             <Button type="primary" icon={<CopyFilled />} onClick={handleUseTemplate}>

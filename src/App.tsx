@@ -33,6 +33,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
 
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>('[]');
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(SELECTED_KEY);
@@ -52,6 +53,7 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     loadAll().then((lists) => {
       if (!cancelled) {
         setChecklists(lists);
+        setLastSavedSnapshot(JSON.stringify(lists));
         setLoaded(true);
       }
     });
@@ -60,10 +62,26 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!loaded) return;
-    saveAll(checklists);
-  }, [checklists, loaded]);
+  const selectedDirty = useMemo(() => {
+    if (!loaded || !selectedId) return false;
+    const current = checklists.find((c) => c.id === selectedId);
+    if (!current) return false;
+    let saved: Checklist[] = [];
+    try {
+      saved = JSON.parse(lastSavedSnapshot) as Checklist[];
+    } catch {
+      return true;
+    }
+    const savedItem = saved.find((c) => c.id === selectedId);
+    if (!savedItem) return true;
+    return JSON.stringify(current) !== JSON.stringify(savedItem);
+  }, [checklists, selectedId, lastSavedSnapshot, loaded]);
+
+  const handleSave = async () => {
+    await saveAll(checklists);
+    setLastSavedSnapshot(JSON.stringify(checklists));
+    messageApi.success('Saved');
+  };
 
   useEffect(() => {
     try {
@@ -217,6 +235,8 @@ function AppInner({ isDark, setIsDark }: AppInnerProps) {
               onDelete={handleDeleteSelected}
               onCreate={handleCreate}
               onSwitchTo={setSelectedId}
+              onSave={handleSave}
+              dirty={selectedDirty}
               isDark={isDark}
             />
           ) : (
