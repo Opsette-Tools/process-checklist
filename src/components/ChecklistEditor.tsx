@@ -54,6 +54,8 @@ interface ChecklistEditorProps {
   onUpdate: (next: Checklist) => void;
   onDelete: () => void;
   onCreate: (c: Checklist) => void;
+  /** Persist a newly-duplicated template and discard the source if it was never saved. */
+  onCreateAndPersistTemplate: (template: Checklist, sourceId: string) => Promise<void>;
   onSwitchTo: (id: string) => void;
   onSave: () => void;
   dirty: boolean;
@@ -61,7 +63,7 @@ interface ChecklistEditorProps {
 }
 
 const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(function ChecklistEditor(
-  { checklist, checklists, presets, onUpdatePresets, onUpdate, onDelete, onCreate, onSwitchTo, onSave, dirty, isDark },
+  { checklist, checklists, presets, onUpdatePresets, onUpdate, onDelete, onCreate, onCreateAndPersistTemplate, onSwitchTo, onSave, dirty, isDark },
   ref,
 ) {
   const screens = Grid.useBreakpoint();
@@ -240,10 +242,12 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
         </div>
       ),
       okText: 'Save',
-      onOk: () => {
+      onOk: async () => {
         const created = duplicateAsTemplate(checklist, name.trim() || `${checklist.name} (Template)`);
-        onCreate(created);
-        messageApi.success('Template saved');
+        // App.tsx decides whether to discard the source (if unsaved), persists the
+        // template via the bridge or localStorage, and switches the selection.
+        // The Ant "Template saved" toast now fires only when persistence succeeds.
+        await onCreateAndPersistTemplate(created, checklist.data_id);
       },
     });
   };

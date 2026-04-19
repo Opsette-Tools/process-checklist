@@ -193,6 +193,65 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
     setChecklists((prev) => [c, ...prev]);
   };
 
+  /**
+   * Create + persist a template in one shot. Used by "Save as Template" so the
+   * button actually saves when clicked (matching its label).
+   *
+   * Behavior:
+   *  - Adds `template` to state and switches the selection to it.
+   *  - If `sourceId` refers to a checklist that was never saved (not present in
+   *    the last-saved snapshot), removes it from state so the sidebar doesn't
+   *    hold an orphan source checklist next to the new template.
+   *  - Persists the new template: bridge.save when bridged, saveAll for standalone.
+   *  - Surfaces an error toast if the bridge save fails; the template stays in
+   *    state so the user can retry with the normal Save button.
+   */
+  const handleCreateAndPersistTemplate = async (template: Checklist, sourceId: string) => {
+    const savedIds = (() => {
+      try {
+        return new Set((JSON.parse(lastSavedChecklists) as Checklist[]).map((c) => c.data_id));
+      } catch {
+        return new Set<string>();
+      }
+    })();
+    const shouldDiscardSource = !savedIds.has(sourceId);
+
+    const nextChecklists = [
+      template,
+      ...checklists.filter((c) => !(shouldDiscardSource && c.data_id === sourceId)),
+    ];
+
+    setChecklists(nextChecklists);
+    setSelectedId(template.data_id);
+
+    if (bridge) {
+      try {
+        await bridge.save(template.data_id, template);
+        // Update last-saved to include the new template so it's not marked dirty.
+        // Keep other entries as they were (source's dirty status is preserved if it
+        // wasn't discarded).
+        setLastSavedChecklists((prev) => {
+          let saved: Checklist[] = [];
+          try { saved = JSON.parse(prev) as Checklist[]; } catch {}
+          // Drop any stale entry for the (now-discarded) source.
+          if (shouldDiscardSource) saved = saved.filter((c) => c.data_id !== sourceId);
+          saved = [template, ...saved.filter((c) => c.data_id !== template.data_id)];
+          return JSON.stringify(saved);
+        });
+        messageApi.success('Template saved');
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'Couldn\'t save template';
+        if (!errMsg.includes('timed out')) messageApi.error(errMsg);
+      }
+      return;
+    }
+
+    // Standalone: write the whole updated array to localStorage.
+    await saveAll(nextChecklists, presets);
+    setLastSavedChecklists(JSON.stringify(nextChecklists));
+    messageApi.success('Template saved');
+  };
+
   const handleDeleteSelected = () => {
     if (!selectedId) return;
     const removed = checklists.find((c) => c.data_id === selectedId);
@@ -326,6 +385,7 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
               onUpdate={handleUpdate}
               onDelete={handleDeleteSelected}
               onCreate={handleCreate}
+              onCreateAndPersistTemplate={handleCreateAndPersistTemplate}
               onSwitchTo={setSelectedId}
               onSave={handleSave}
               dirty={dirty}
