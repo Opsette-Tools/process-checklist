@@ -7,7 +7,7 @@ import ChecklistEditor, { type ChecklistEditorHandle } from '@/components/Checkl
 import EmptyState from '@/components/EmptyState';
 import AboutModal from '@/components/AboutModal';
 import PrivacyModal from '@/components/PrivacyModal';
-import { createChecklist, defaultPresets, loadAll, saveAll } from '@/lib/storage';
+import { clearLocalData, createChecklist, defaultPresets, loadAll, saveAll } from '@/lib/storage';
 import type { Bridge } from '@/lib/bridge';
 import type { Checklist, Presets } from '@/types';
 
@@ -58,21 +58,29 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
     // Bridge-active: take parent's init as the source of truth; skip local migration
     // entirely per parent-side guidance (avoids duplicate rows if both have data).
     if (bridge) {
-      bridge.onTimeout((msg) => {
-        messageApi.error(msg.includes('save_presets')
-          ? 'Couldn\'t save categories. Try again in a moment.'
-          : 'Couldn\'t save to Opsette. Try again in a moment.');
+      const unsubscribeTimeout = bridge.onTimeout(() => {
+        messageApi.error('Couldn\'t save to Opsette. Try again in a moment.');
       });
       const lists = bridge.init.items.map((i) => i.value);
-      const loadedPresets: Presets = bridge.init.presets?.categories
-        ? bridge.init.presets
-        : defaultPresets();
+      const loadedPresets: Presets =
+        bridge.init.presets && Array.isArray(bridge.init.presets.categories) && bridge.init.presets.categories.length > 0
+          ? bridge.init.presets
+          : defaultPresets();
       setChecklists(lists);
       setPresets(loadedPresets);
       setLastSavedChecklists(JSON.stringify(lists));
       setLastSavedPresets(JSON.stringify(loadedPresets));
       setLoaded(true);
-      return;
+
+      // State is hydrated from the bridge → any legacy localStorage data is stale
+      // zombies from a previous standalone session. Wipe the data-bearing keys now
+      // so a future handshake failure can't surface them. UI prefs (dark/selected)
+      // are left alone.
+      clearLocalData();
+
+      return () => {
+        unsubscribeTimeout();
+      };
     }
 
     // Standalone: localStorage path, with legacy shape migration on read.
@@ -197,7 +205,7 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
     // re-upserts the checklist with the same data_id, which parent treats as an
     // insert. Net effect: delete-then-resave is idempotent. No coordination needed.
     if (bridge) {
-      bridge.remove(removed.data_id).catch(() => {
+      bridge.delete(removed.data_id).catch(() => {
         // Timeout handler already toasted; nothing else to do on the UI.
       });
     } else {

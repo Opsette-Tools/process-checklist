@@ -1,7 +1,7 @@
 /**
  * postMessage bridge — Process Checklist (child) ↔ Opsette (parent).
  *
- * Protocol v1.1 — see memory/project_checklist_tool.md for the full spec.
+ * Protocol v1.1. Mirrors Script Builder's bridge (proven working in prod).
  *
  * Message envelope: every message carries { source: 'opsette', version: 1, type, ... }.
  *
@@ -12,24 +12,22 @@
  *   { type: 'delete',       request_id, data_id }
  *
  * Parent → Child:
- *   { type: 'init',           presets, items }           // items = [{ data_id, value }, ...]
- *   { type: 'saved',          data_id, updated_at }
- *   { type: 'presets_saved',  updated_at }
- *   { type: 'deleted',        data_id }
+ *   { type: 'init',           presets, items }               // items = [{ data_id, value }, ...]
+ *   { type: 'saved',          request_id, data_id, updated_at }
+ *   { type: 'presets_saved',  request_id, updated_at }
+ *   { type: 'deleted',        request_id, data_id }
  *   { type: 'error',          request_id, message }
+ *
+ * Acks are matched on `request_id` (NOT data_id/type) so parallel saves don't
+ * cross-resolve — this was the main bug in the previous implementation.
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import type { Checklist, Presets } from '@/types';
 
-const TRUSTED_ORIGINS = new Set([
-  'https://opsette.io',
-  'http://localhost:8081',
-]);
-
+const TRUSTED_ORIGINS = ['https://opsette.io', 'http://localhost:8081'] as const;
 const MESSAGE_SOURCE = 'opsette';
 const MESSAGE_VERSION = 1;
-const INIT_TIMEOUT_MS = 1000;
+const HANDSHAKE_TIMEOUT_MS = 1000;
 const REQUEST_TIMEOUT_MS = 5000;
 
 export interface InitPayload {
@@ -37,153 +35,165 @@ export interface InitPayload {
   items: Array<{ data_id: string; value: Checklist }>;
 }
 
-interface Envelope {
-  source: typeof MESSAGE_SOURCE;
-  version: typeof MESSAGE_VERSION;
-  type: string;
-  [k: string]: unknown;
+export interface Bridge {
+  /** Shape from parent's init message. Only present when the bridge is active. */
+  init: InitPayload;
+  save: (data_id: string, value: Checklist) => Promise<void>;
+  savePresets: (presets: Presets) => Promise<void>;
+  delete: (data_id: string) => Promise<void>;
+  /** Register a callback invoked when any in-flight request times out. Returns an unsubscribe. */
+  onTimeout: (handler: () => void) => () => void;
 }
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
   timeoutId: ReturnType<typeof setTimeout>;
-  /** What to match incoming messages against. */
-  matcher: (msg: Envelope) => boolean;
 }
 
-function isTrustedEnvelope(e: MessageEvent): e is MessageEvent<Envelope> {
-  if (!TRUSTED_ORIGINS.has(e.origin)) return false;
-  const d = e.data as Envelope | null;
-  return !!d && d.source === MESSAGE_SOURCE && d.version === MESSAGE_VERSION && typeof d.type === 'string';
+function newRequestId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 }
 
-function postToParent(payload: Omit<Envelope, 'source' | 'version'>) {
-  const msg: Envelope = { source: MESSAGE_SOURCE, version: MESSAGE_VERSION, ...payload };
-  // We don't know which trusted origin is hosting us (prod vs. local dev), so we try each.
-  // Same-origin iframes would use '*' but we want strict origin on production.
+function isTrustedOrigin(origin: string): boolean {
+  return (TRUSTED_ORIGINS as readonly string[]).includes(origin);
+}
+
+function isValidEnvelope(msg: unknown): msg is { source: string; version: number; type: string; [k: string]: unknown } {
+  if (!msg || typeof msg !== 'object') return false;
+  const m = msg as Record<string, unknown>;
+  return m.source === MESSAGE_SOURCE && m.version === MESSAGE_VERSION && typeof m.type === 'string';
+}
+
+function postToAllowedOrigins(message: Record<string, unknown>): void {
   for (const origin of TRUSTED_ORIGINS) {
     try {
-      window.parent.postMessage(msg, origin);
+      window.parent.postMessage(message, origin);
     } catch {
-      // ignore — wrong origin gets silently dropped by the browser
+      // Browser drops wrong-origin deliveries silently; ignore thrown errors.
     }
   }
 }
 
-export interface Bridge {
-  /** Shape from parent's init message. Only present when bridge is active. */
-  init: InitPayload;
-  save: (data_id: string, value: Checklist) => Promise<void>;
-  savePresets: (presets: Presets) => Promise<void>;
-  remove: (data_id: string) => Promise<void>;
-  /** Register a callback to be notified when any in-flight request times out. */
-  onTimeout: (handler: (message: string) => void) => void;
-}
+export function connectBridge(): Promise<Bridge | null> {
+  if (typeof window === 'undefined' || window.parent === window) {
+    return Promise.resolve(null);
+  }
 
-/**
- * Attempts the handshake with the parent. Resolves with a Bridge if the parent
- * responds with `init` within INIT_TIMEOUT_MS, or `null` if no parent is
- * available or the handshake times out (→ caller falls back to localStorage).
- */
-export async function connectBridge(): Promise<Bridge | null> {
-  // Not inside an iframe → standalone. Nothing to do.
-  if (typeof window === 'undefined' || window.parent === window) return null;
-
-  return new Promise<Bridge | null>((resolve) => {
-    let resolved = false;
+  return new Promise((resolve) => {
     const pending = new Map<string, PendingRequest>();
-    let timeoutHandler: ((message: string) => void) | null = null;
+    const timeoutHandlers = new Set<() => void>();
+    let handshakeSettled = false;
+    let handshakeTimeoutId: ReturnType<typeof setTimeout>;
 
-    const messageListener = (e: MessageEvent) => {
-      if (!isTrustedEnvelope(e)) return;
-      const msg = e.data;
+    const handleMessage = (event: MessageEvent) => {
+      if (!isTrustedOrigin(event.origin)) return;
+      if (!isValidEnvelope(event.data)) return;
 
-      if (!resolved && msg.type === 'init') {
-        resolved = true;
-        clearTimeout(initTimeout);
+      const msg = event.data;
 
-        const payload: InitPayload = {
-          presets: (msg.presets as Presets) ?? { categories: [] },
-          items: Array.isArray(msg.items) ? (msg.items as InitPayload['items']) : [],
+      // Handshake: parent's first `init` settles the promise and builds the Bridge.
+      if (!handshakeSettled && msg.type === 'init') {
+        handshakeSettled = true;
+        clearTimeout(handshakeTimeoutId);
+
+        const rawPresets = (msg.presets && typeof msg.presets === 'object')
+          ? msg.presets as Partial<Presets>
+          : {};
+        const presets: Presets = {
+          categories: Array.isArray(rawPresets.categories) ? rawPresets.categories : [],
         };
+        const items = Array.isArray(msg.items) ? msg.items as InitPayload['items'] : [];
 
-        const bridge: Bridge = {
-          init: payload,
-          save: (data_id, value) => sendRequest('save',
-            { data_id, value },
-            (m) => m.type === 'saved' && m.data_id === data_id,
-            (m) => m.type === 'error',
-          ),
-          savePresets: (presets) => sendRequest('save_presets',
-            { presets },
-            (m) => m.type === 'presets_saved',
-            (m) => m.type === 'error',
-          ),
-          remove: (data_id) => sendRequest('delete',
-            { data_id },
-            (m) => m.type === 'deleted' && m.data_id === data_id,
-            (m) => m.type === 'error',
-          ),
-          onTimeout: (handler) => { timeoutHandler = handler; },
-        };
-        resolve(bridge);
+        resolve(buildBridge({ presets, items }, pending, timeoutHandlers));
         return;
       }
 
-      // After init, route acks to pending requests.
-      for (const [requestId, req] of pending) {
-        if (req.matcher(msg)) {
-          clearTimeout(req.timeoutId);
-          pending.delete(requestId);
-          if (msg.type === 'error') {
-            req.reject(new Error(typeof msg.message === 'string' ? msg.message : 'Unknown error'));
-          } else {
-            req.resolve(msg);
-          }
-          return;
-        }
+      if (!handshakeSettled) return;
+
+      // Post-init: every ack is matched on request_id.
+      const requestId = typeof msg.request_id === 'string' ? msg.request_id : null;
+      if (!requestId) return;
+
+      const req = pending.get(requestId);
+      if (!req) return;
+
+      clearTimeout(req.timeoutId);
+      pending.delete(requestId);
+
+      if (msg.type === 'error') {
+        const message = typeof msg.message === 'string' ? msg.message : 'Unknown bridge error';
+        req.reject(new Error(message));
+      } else {
+        // Any non-error ack with a matching request_id → success.
+        req.resolve(msg);
       }
     };
 
-    const sendRequest = <T>(
-      type: string,
-      payload: Record<string, unknown>,
-      successMatcher: (msg: Envelope) => boolean,
-      errorMatcher: (msg: Envelope) => boolean,
-    ): Promise<T> => {
-      const request_id = uuidv4();
-      return new Promise<T>((resolveReq, rejectReq) => {
-        const timeoutId = setTimeout(() => {
-          pending.delete(request_id);
-          const errMsg = `Bridge request timed out: ${type}`;
-          if (timeoutHandler) timeoutHandler(errMsg);
-          rejectReq(new Error(errMsg));
-        }, REQUEST_TIMEOUT_MS);
-
-        pending.set(request_id, {
-          resolve: resolveReq as PendingRequest['resolve'],
-          reject: rejectReq,
-          timeoutId,
-          matcher: (m) => {
-            // Errors are addressed by request_id; successes by their own rules.
-            if (errorMatcher(m) && m.request_id === request_id) return true;
-            return successMatcher(m);
-          },
-        });
-
-        postToParent({ type, request_id, ...payload });
-      });
-    };
-
-    window.addEventListener('message', messageListener);
-    postToParent({ type: 'ready' });
-
-    const initTimeout = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      window.removeEventListener('message', messageListener);
+    // Set the handshake timeout BEFORE posting `ready` so the handshake is armed
+    // no matter how synchronously the parent replies.
+    handshakeTimeoutId = setTimeout(() => {
+      if (handshakeSettled) return;
+      handshakeSettled = true;
+      window.removeEventListener('message', handleMessage);
       resolve(null);
-    }, INIT_TIMEOUT_MS);
+    }, HANDSHAKE_TIMEOUT_MS);
+
+    window.addEventListener('message', handleMessage);
+
+    postToAllowedOrigins({
+      source: MESSAGE_SOURCE,
+      version: MESSAGE_VERSION,
+      type: 'ready',
+    });
   });
+}
+
+function buildBridge(
+  init: InitPayload,
+  pending: Map<string, PendingRequest>,
+  timeoutHandlers: Set<() => void>,
+): Bridge {
+  const sendRequest = <T>(payload: Record<string, unknown>): Promise<T> => {
+    return new Promise<T>((resolve, reject) => {
+      const requestId = newRequestId();
+
+      const timeoutId = setTimeout(() => {
+        if (!pending.has(requestId)) return;
+        pending.delete(requestId);
+        timeoutHandlers.forEach((h) => {
+          try { h(); } catch {}
+        });
+        reject(new Error('Request timed out'));
+      }, REQUEST_TIMEOUT_MS);
+
+      pending.set(requestId, {
+        resolve: resolve as PendingRequest['resolve'],
+        reject,
+        timeoutId,
+      });
+
+      postToAllowedOrigins({
+        source: MESSAGE_SOURCE,
+        version: MESSAGE_VERSION,
+        request_id: requestId,
+        ...payload,
+      });
+    });
+  };
+
+  return {
+    init,
+    save: (data_id, value) => sendRequest<unknown>({ type: 'save', data_id, value }).then(() => undefined),
+    savePresets: (presets) => sendRequest<unknown>({ type: 'save_presets', presets }).then(() => undefined),
+    delete: (data_id) => sendRequest<unknown>({ type: 'delete', data_id }).then(() => undefined),
+    onTimeout: (handler) => {
+      timeoutHandlers.add(handler);
+      return () => { timeoutHandlers.delete(handler); };
+    },
+  };
 }

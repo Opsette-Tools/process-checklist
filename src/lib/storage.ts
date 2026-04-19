@@ -4,6 +4,16 @@ import type { Category, Checklist, ChecklistStep, Presets } from '@/types';
 const CHECKLISTS_KEY = 'opsette.checklist.v1';
 const PRESETS_KEY = 'opsette.checklist.presets.v1';
 
+/** Data-bearing localStorage keys (NOT UI prefs like dark mode / selection).
+ *  When the bridge becomes authoritative, these get wiped to kill zombie data. */
+export const DATA_STORAGE_KEYS = [CHECKLISTS_KEY, PRESETS_KEY] as const;
+
+export function clearLocalData(): void {
+  for (const k of DATA_STORAGE_KEYS) {
+    try { localStorage.removeItem(k); } catch { /* ignore */ }
+  }
+}
+
 export function defaultCategories(): Category[] {
   return [
     { data_id: uuidv4(), label: 'Doc', color: 'blue' },
