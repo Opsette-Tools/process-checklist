@@ -1,4 +1,5 @@
 import { Modal, Typography } from 'antd';
+import { OpsetteFooterLogo } from '@/components/opsette-share';
 
 const { Paragraph, Title } = Typography;
 
@@ -17,9 +18,7 @@ export default function PrivacyModal({ open, onClose }: PrivacyModalProps) {
       <Paragraph>
         No cookies, no tracking, no analytics, no account required.
       </Paragraph>
-      <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        Learn more at <a href="https://opsette.io" target="_blank" rel="noopener noreferrer">opsette.io</a>
-      </Paragraph>
+      <OpsetteFooterLogo />
     </Modal>
   );
 }

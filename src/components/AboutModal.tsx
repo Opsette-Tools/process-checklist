@@ -1,4 +1,5 @@
 import { Modal, Typography } from 'antd';
+import { OpsetteFooterLogo } from '@/components/opsette-share';
 
 const { Paragraph, Title, Text } = Typography;
 
@@ -42,9 +43,7 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
         <div><Text type="secondary">Close drawer / exit field</Text></div>
       </div>
 
-      <Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 16 }}>
-        Learn more at <a href="https://opsette.io" target="_blank" rel="noopener noreferrer">opsette.io</a>
-      </Paragraph>
+      <OpsetteFooterLogo />
     </Modal>
   );
 }

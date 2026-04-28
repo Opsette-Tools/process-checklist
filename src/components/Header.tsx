@@ -1,5 +1,6 @@
 import { Layout, Typography, Switch, Space } from 'antd';
 import { SunOutlined, MoonOutlined, ScheduleOutlined } from '@ant-design/icons';
+import { ShareAppButton } from '@/components/opsette-share';
 
 const { Header: AntHeader } = Layout;
 const { Title } = Typography;
@@ -45,7 +46,8 @@ export default function Header({ isDark, onToggleDark, leftSlot }: HeaderProps) 
         </Title>
       </Space>
 
-      <div style={{ width: 80, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+      <div style={{ minWidth: 80, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+        <ShareAppButton size={32} />
         <SunOutlined
           style={{
             opacity: isDark ? 0.4 : 1,
