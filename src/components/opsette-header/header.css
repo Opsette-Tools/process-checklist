@@ -1,0 +1,101 @@
+/* Opsette Header — framework-free styles. Scoped via .ops-header-* prefixes.
+ *
+ * This stylesheet is the structural contract for the Opsette unified header.
+ * Both shadcn/Radix apps and AntD apps render the same DOM and use these
+ * exact class names; only the surrounding shell differs. See HEADER_BAR.md.
+ */
+
+.ops-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 60px;
+  padding: 0 20px;
+  background: #fafafa;
+  border-bottom: 1px solid #EAEAEA;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .ops-header { padding: 0 16px; gap: 12px; }
+}
+
+/* Left: small Opsette mark, like macOS Apple menu */
+.ops-header-mark {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+  text-decoration: none;
+  line-height: 0;
+}
+.ops-header-mark:hover { opacity: 1; }
+.ops-header-mark:focus-visible {
+  outline: 2px solid #426f62;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.ops-header-mark img {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+@media (max-width: 640px) {
+  .ops-header-mark img { width: 24px; height: 24px; }
+}
+
+/* Center: tool brand icon + name (the page H1) */
+.ops-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0; /* allow truncation */
+}
+.ops-header-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  color: #2f4f46;       /* Phosphor SVGs use currentColor */
+}
+.ops-header-name {
+  margin: 0;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .ops-header-name { font-size: 20px; }
+}
+
+/* Right: share button + any tool-specific controls (dark toggle, etc.) */
+.ops-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* Dark mode (AntD apps that support it).
+ * Brand icon stays #2f4f46 in both modes — it's the brand mark, not adapted text.
+ * On #141414, contrast is ~2.15:1 — muted but recognizable, signed off in the
+ * process-checklist canary. Verify by eyeball, not by ratio. If a tool has
+ * customized the header background to a deep green close to #2f4f46, the icon
+ * will vanish — snap it back to #141414, never recolor the icon. */
+.ops-header[data-theme="dark"] {
+  background: #141414;
+  border-bottom-color: #303030;
+}
+.ops-header[data-theme="dark"] .ops-header-name { color: #fafafa; }

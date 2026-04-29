@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ConfigProvider, theme, Layout, Grid, Drawer, Button, Space, App as AntApp, message } from 'antd';
-import { MenuOutlined } from '@ant-design/icons';
-import Header from '@/components/Header';
+import { ConfigProvider, theme, Layout, Grid, Drawer, Button, Space, Switch, App as AntApp, message } from 'antd';
+import { MenuOutlined, SunOutlined, MoonOutlined } from '@ant-design/icons';
+import { OpsetteHeader } from '@/components/opsette-header';
 import Sidebar from '@/components/Sidebar';
 import ChecklistEditor, { type ChecklistEditorHandle } from '@/components/ChecklistEditor';
 import EmptyState from '@/components/EmptyState';
@@ -337,14 +337,38 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
     />
   );
 
-  const headerLeft = isMobile ? (
-    <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />
-  ) : null;
+  const headerExtras = (
+    <>
+      {isMobile && (
+        <Button
+          type="text"
+          icon={<MenuOutlined />}
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open checklists menu"
+        />
+      )}
+      <SunOutlined
+        style={{
+          opacity: isDark ? 0.4 : 1,
+          fontSize: 13,
+          color: isDark ? '#94A3B8' : '#64748B',
+        }}
+      />
+      <Switch checked={isDark} onChange={setIsDark} size="small" />
+      <MoonOutlined
+        style={{
+          opacity: isDark ? 1 : 0.4,
+          fontSize: 13,
+          color: isDark ? '#E4C49A' : '#94A3B8',
+        }}
+      />
+    </>
+  );
 
   return (
     <Layout style={{ minHeight: '100vh', background: isDark ? '#000' : '#f5f5f5' }}>
       {messageContext}
-      <Header isDark={isDark} onToggleDark={setIsDark} leftSlot={headerLeft} />
+      <OpsetteHeader theme={isDark ? 'dark' : 'light'} rightExtra={headerExtras} />
       <Layout style={{ background: 'transparent' }}>
         {!isMobile && (
           <Sider
