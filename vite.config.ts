@@ -18,23 +18,10 @@ export default defineConfig(() => ({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: { enabled: false },
+      manifest: false,
       workbox: {
+        navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/~oauth/],
-      },
-      manifest: {
-        name: 'Process Checklist',
-        short_name: 'Checklist',
-        description: 'Create reusable checklists for any multi-step process.',
-        display: 'standalone',
-        theme_color: '#A97142',
-        background_color: '#faf6f1',
-        start_url: '/process-checklist/',
-        scope: '/process-checklist/',
-        icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-        ],
       },
     }),
   ],
