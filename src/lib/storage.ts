@@ -124,6 +124,7 @@ function migrateFromLegacy(rawChecklists: unknown[]): MigratedShape {
       isTemplate: !!c.isTemplate,
       sourceTemplateId: typeof c.sourceTemplateId === 'string' ? c.sourceTemplateId : undefined,
       steps,
+      icon: typeof c.icon === 'string' ? c.icon : undefined,
       createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
       updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : Date.now(),
       completedAt: typeof c.completedAt === 'number' ? c.completedAt : undefined,
@@ -214,6 +215,7 @@ export async function loadAll(): Promise<MigratedShape> {
         completed: !!s.completed,
         sortOrder: typeof s.sortOrder === 'number' ? s.sortOrder : 0,
       })),
+      icon: typeof c.icon === 'string' ? c.icon : undefined,
       createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
       updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : Date.now(),
       completedAt: typeof c.completedAt === 'number' ? c.completedAt : undefined,
@@ -283,6 +285,7 @@ export function duplicateAsActive(template: Checklist, name: string): Checklist 
     description: template.description,
     isTemplate: false,
     sourceTemplateId: template.data_id,
+    icon: template.icon,
     steps: template.steps.map((s, i) => {
       const dueDate = typeof s.dueOffsetDays === 'number'
         ? now + s.dueOffsetDays * 24 * 60 * 60 * 1000
@@ -309,6 +312,7 @@ export function duplicateAsTemplate(active: Checklist, name: string): Checklist 
     name,
     description: active.description,
     isTemplate: true,
+    icon: active.icon,
     steps: active.steps.map((s, i) => ({
       ...s,
       data_id: uuidv4(),

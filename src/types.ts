@@ -26,6 +26,8 @@ export interface Checklist {
   isTemplate: boolean;
   sourceTemplateId?: string;
   steps: ChecklistStep[];
+  /** Phosphor icon name (see lib/icons.ts CHECKLIST_ICONS). Optional — falls back to a name-derived monogram. */
+  icon?: string;
   createdAt: number;
   updatedAt: number;
   completedAt?: number;

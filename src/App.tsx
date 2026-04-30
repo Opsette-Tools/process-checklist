@@ -15,6 +15,7 @@ const { Sider, Content, Footer } = Layout;
 
 const DARK_KEY = 'opsette.checklist.dark';
 const SELECTED_KEY = 'opsette.checklist.selected';
+const COLLAPSED_KEY = 'opsette.checklist.sidebarCollapsed';
 
 interface AppInnerProps {
   isDark: boolean;
@@ -48,6 +49,19 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, sidebarCollapsed ? '1' : '0');
+    } catch {}
+  }, [sidebarCollapsed]);
 
   const editorRef = useRef<ChecklistEditorHandle>(null);
   const [messageApi, messageContext] = message.useMessage();
@@ -334,6 +348,9 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
       selectedId={selectedId}
       onSelect={handleSelect}
       onNew={handleNew}
+      mode={!isMobile && sidebarCollapsed ? 'rail' : 'full'}
+      onToggleMode={!isMobile ? () => setSidebarCollapsed((v) => !v) : undefined}
+      isDark={isDark}
     />
   );
 
@@ -373,6 +390,11 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
         {!isMobile && (
           <Sider
             width={260}
+            collapsedWidth={56}
+            collapsible
+            collapsed={sidebarCollapsed}
+            onCollapse={setSidebarCollapsed}
+            trigger={null}
             theme={isDark ? 'dark' : 'light'}
             style={{
               background: isDark ? '#141414' : '#ffffff',
@@ -381,6 +403,7 @@ function AppInner({ isDark, setIsDark, bridge }: AppInnerProps) {
               position: 'sticky',
               top: 60,
               overflow: 'hidden',
+              transition: 'all 0.2s',
             }}
           >
             {sidebar}

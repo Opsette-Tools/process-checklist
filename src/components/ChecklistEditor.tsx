@@ -39,6 +39,7 @@ import { exportChecklistToPdf } from '@/lib/pdf-export';
 import StepRow from './StepRow';
 import AddStepForm, { type AddStepFormHandle } from './AddStepForm';
 import CategoryManager from './CategoryManager';
+import IconPicker from './IconPicker';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -311,15 +312,38 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
           </Space>
         )}
 
-        <Input
-          variant="borderless"
-          value={nameDraft}
-          onChange={(e) => setNameDraft(e.target.value)}
-          onBlur={() => patch({ name: nameDraft.trim() || 'Untitled Checklist' })}
-          onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
-          style={{ fontSize: 24, fontWeight: 600, padding: 0, marginBottom: 4 }}
-          placeholder="Checklist name"
-        />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
+          <div style={{ paddingTop: 2 }}>
+            <IconPicker
+              value={checklist.icon}
+              isTemplate={checklist.isTemplate}
+              onChange={(next) => patch({ icon: next })}
+              isDark={isDark}
+              accentColor={checklist.isTemplate ? '#cfae60' : '#A97142'}
+            />
+          </div>
+          <TextArea
+            variant="borderless"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={() => patch({ name: nameDraft.trim() || 'Untitled Checklist' })}
+            onPressEnter={(e) => {
+              e.preventDefault();
+              (e.target as HTMLTextAreaElement).blur();
+            }}
+            autoSize={{ minRows: 1, maxRows: 4 }}
+            style={{
+              fontSize: 24,
+              fontWeight: 600,
+              padding: 0,
+              flex: 1,
+              minWidth: 0,
+              lineHeight: 1.25,
+              resize: 'none',
+            }}
+            placeholder="Checklist name"
+          />
+        </div>
 
         <TextArea
           variant="borderless"
