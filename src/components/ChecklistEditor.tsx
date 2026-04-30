@@ -20,6 +20,7 @@ import {
   StarFilled,
   CheckCircleFilled,
   AppstoreOutlined,
+  FilePdfOutlined,
 } from '@ant-design/icons';
 import {
   DndContext,
@@ -34,6 +35,7 @@ import confetti from 'canvas-confetti';
 import type { Category, Checklist, ChecklistStep, Presets } from '@/types';
 import { createStep, duplicateStep, duplicateAsActive, duplicateAsTemplate } from '@/lib/storage';
 import { copyChecklistToClipboard } from '@/lib/summary';
+import { exportChecklistToPdf } from '@/lib/pdf-export';
 import StepRow from './StepRow';
 import AddStepForm, { type AddStepFormHandle } from './AddStepForm';
 import CategoryManager from './CategoryManager';
@@ -261,6 +263,14 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
     }
   };
 
+  const handleExportPdf = async () => {
+    try {
+      await exportChecklistToPdf(checklist, presets.categories);
+    } catch {
+      messageApi.error('Could not generate PDF');
+    }
+  };
+
   const handleDeleteChecklist = () => {
     Modal.confirm({
       title: 'Delete this checklist?',
@@ -359,6 +369,11 @@ const ChecklistEditor = forwardRef<ChecklistEditorHandle, ChecklistEditorProps>(
         <Tooltip title="Copy as rich text — pastes formatted into Docs, Notion, email.">
           <Button icon={<CopyOutlined />} onClick={handleCopySummary} disabled={total === 0}>
             {isMobile ? null : 'Copy'}
+          </Button>
+        </Tooltip>
+        <Tooltip title="Export as fillable PDF — checkboxes stay interactive in PDF readers.">
+          <Button icon={<FilePdfOutlined />} onClick={handleExportPdf} disabled={total === 0}>
+            {isMobile ? null : 'Export PDF'}
           </Button>
         </Tooltip>
         <Tooltip title="Manage categories">
